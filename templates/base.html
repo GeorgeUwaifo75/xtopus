@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Xtopus - Property Management{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Loading Spinner Styles */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+        }
+        
+        .spinner-overlay.active {
+            display: flex;
+        }
+        
+        .spinner-container {
+            background: white;
+            padding: 2rem 3rem;
+            border-radius: 1rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            animation: scaleIn 0.3s ease;
+        }
+        
+        @keyframes scaleIn {
+            from {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1rem;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #8B5CF6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .spinner-text {
+            color: #4B5563;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-top: 0.5rem;
+        }
+        
+        .spinner-subtext {
+            color: #9CA3AF;
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+        
+        /* Inline spinner for buttons */
+        .spinner-small {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #8B5CF6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+        
+        .btn-loading {
+            opacity: 0.7;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* Notification Badge Styles */
+        .notification-badge-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .notification-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #EF4444;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 6px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            min-width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+            animation: pulse-badge 2s infinite;
+            transition: transform 0.2s ease;
+        }
+        
+        .notification-badge:hover {
+            transform: scale(1.1);
+        }
+        
+        .notification-badge.zero {
+            display: none;
+        }
+        
+        @keyframes pulse-badge {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .notification-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: white;
+            min-width: 320px;
+            max-width: 400px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            padding: 0.5rem 0;
+            display: none;
+            z-index: 9999;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid rgba(0,0,0,0.08);
+        }
+        
+        .notification-dropdown.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .notification-dropdown-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f0f0f0;
+            font-weight: 600;
+            color: #1a1a2e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 1;
+            border-radius: 12px 12px 0 0;
+        }
+        
+        .notification-dropdown-header .mark-read-btn {
+            background: none;
+            border: none;
+            color: #8B5CF6;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        
+        .notification-dropdown-header .mark-read-btn:hover {
+            background: #f3f0ff;
+        }
+        
+        .notification-dropdown-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f5f5f5;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            transition: background 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .notification-dropdown-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .notification-dropdown-item .icon {
+            font-size: 1.1rem;
+            margin-top: 0.1rem;
+            flex-shrink: 0;
+        }
+        
+        .notification-dropdown-item .content {
+            flex: 1;
+        }
+        
+        .notification-dropdown-item .content .title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #1a1a2e;
+        }
+        
+        .notification-dropdown-item .content .description {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.1rem;
+        }
+        
+        .notification-dropdown-item .badge-count {
+            background: #EF4444;
+            color: white;
+            border-radius: 50%;
+            padding: 0.1rem 0.5rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: auto;
+            flex-shrink: 0;
+            min-width: 22px;
+            text-align: center;
+        }
+        
+        .notification-dropdown-item.pending-tenant .icon { color: #F59E0B; }
+        .notification-dropdown-item.pending-payment .icon { color: #8B5CF6; }
+        .notification-dropdown-item.unread-message .icon { color: #3B82F6; }
+        
+        .notification-empty {
+            padding: 2rem 1rem;
+            text-align: center;
+            color: #999;
+        }
+        
+        .notification-empty i {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #d1d5db;
+        }
+
+        .nav-link.has-notifications {
+            position: relative;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .notification-dropdown {
+                position: fixed;
+                top: 60px;
+                right: 10px;
+                left: 10px;
+                min-width: unset;
+                max-width: unset;
+                width: auto;
+            }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Loading Spinner Overlay -->
+    <div id="loadingSpinner" class="spinner-overlay">
+        <div class="spinner-container">
+            <div class="spinner"></div>
+            <div class="spinner-text" id="spinnerText">Loading...</div>
+            <div class="spinner-subtext" id="spinnerSubtext">Please wait</div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <a href="/">
+                    <span class="logo-text">🐙 Xtopus</span>
+                </a>
+            </div>
+            
+            <button class="nav-toggle" aria-label="Toggle navigation" onclick="toggleMenu()">
+                <i class="fas fa-bars"></i>
+            </button>
+            
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a></li>
+                {% if session_token %}
+                <li><a href="/dashboard" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                
+                
+                {% else %}
+                <li><a href="/login" class="nav-link"><i class="fas fa-sign-in-alt"></i> Sign In</a></li>
+                <li><a href="/signup" class="nav-link"><i class="fas fa-user-plus"></i> Sign Up</a></li>
+                {% endif %}
+                <!-- These are visible to both logged in and logged out users -->
+                <li><a href="#" class="nav-link" onclick="showHelp()"><i class="fas fa-question-circle"></i> Help</a></li>
+                <li><a href="#" class="nav-link" onclick="showAbout()"><i class="fas fa-info-circle"></i> About Us</a></li>
+                <li><a href="#" class="nav-link" onclick="showContact()"><i class="fas fa-envelope"></i> Contact Us</a></li>
+
+
+               {% if session_token %}
+                
+                <!-- Notification Bell with Badge - Second to last -->
+                <li>
+                    <div class="notification-badge-container">
+                        <a href="#" class="nav-link" onclick="toggleNotificationDropdown(event)" id="notificationBell">
+                            <i class="fas fa-bell"></i>
+                            <span class="notification-badge zero" id="notificationBadge">0</span>
+                        </a>
+                        
+                        <!-- Notification Dropdown -->
+                        <div class="notification-dropdown" id="notificationDropdown">
+                            <div class="notification-dropdown-header">
+                                <span>📬 Notifications</span>
+                                <button class="mark-read-btn" onclick="markAllAsRead(event)">Mark all as read</button>
+                            </div>
+                            <div id="notificationList">
+                                <div class="notification-empty">
+                                    <i class="fas fa-bell-slash"></i>
+                                    <p>No notifications</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </li>
+                
+                <!-- Logout - Last item -->
+                <li><a href="/logout" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                {% endif %}
+                
+
+
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <p>&copy; 2026 Xtopus. All rights reserved.</p>
+            <p>Email: geocorpsys@gmail.com | Telephone: 09038197586</p>
+            <p class="mission">{{ mission|default('Managing properties can be refreshing and relaxing again.') }}</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/main.js"></script>
+    <!-- Load Paystack only if on payment page -->
+    {% if paystack_public_key %}
+    <script src="https://js.paystack.co/v1/inline.js"></script>
+    {% endif %}
+    <script>
+    // ============================================
+    // LOADING SPINNER FUNCTIONS
+    // ============================================
+    function showSpinner(text = 'Loading...', subtext = 'Please wait') {
+        const overlay = document.getElementById('loadingSpinner');
+        if (overlay) {
+            document.getElementById('spinnerText').textContent = text;
+            document.getElementById('spinnerSubtext').textContent = subtext;
+            overlay.classList.add('active');
+        }
+    }
+    
+    function hideSpinner() {
+        const overlay = document.getElementById('loadingSpinner');
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+    }
+    
+    function showButtonSpinner(button) {
+        if (button) {
+            const originalText = button.textContent;
+            button.dataset.originalText = originalText;
+            button.innerHTML = '<span class="spinner-small"></span> Processing...';
+            button.classList.add('btn-loading');
+            button.disabled = true;
+        }
+    }
+    
+    function hideButtonSpinner(button) {
+        if (button) {
+            button.innerHTML = button.dataset.originalText || 'Submit';
+            button.classList.remove('btn-loading');
+            button.disabled = false;
+        }
+    }
+
+    // ============================================
+    // NOTIFICATION SYSTEM
+    // ============================================
+    
+    // Fetch notification counts and update badge
+    async function updateNotificationBadge() {
+        try {
+            const response = await fetch('/api/admin/get_notification_counts');
+            const data = await response.json();
+            
+            if (data.success && data.counts) {
+                const badge = document.getElementById('notificationBadge');
+                const total = data.counts.total || 0;
+                
+                if (total > 0) {
+                    badge.textContent = total > 99 ? '99+' : total;
+                    badge.classList.remove('zero');
+                } else {
+                    badge.classList.add('zero');
+                }
+                
+                // Update dropdown content
+                updateNotificationDropdown(data.counts);
+            }
+        } catch (error) {
+            console.error('Error fetching notification counts:', error);
+        }
+    }
+    
+    // Update notification dropdown content - Role-based display
+    function updateNotificationDropdown(counts) {
+        const list = document.getElementById('notificationList');
+        if (!list) return;
+        
+        let items = [];
+        let hasNotifications = false;
+        
+        // Get user role from the page context (passed from server)
+        // Safely check if user exists before accessing its properties
+        let userRole = '';
+        {% if user %}
+        userRole = '{{ user.user_category }}';
+        {% endif %}
+        
+        // Pending Tenants (only for admins and sub-admins)
+        if (counts.pending_tenants > 0 && ['Super Administrator', 'Administrator', 'Sub-Administrator'].includes(userRole)) {
+            hasNotifications = true;
+            let description = 'Users waiting for tenant approval';
+            if (userRole === 'Sub-Administrator') {
+                description = 'Users you created waiting for tenant approval';
+            }
+            items.push({
+                icon: '🟡',
+                title: `${counts.pending_tenants} Pending Tenant${counts.pending_tenants > 1 ? 's' : ''}`,
+                description: description,
+                badge: counts.pending_tenants,
+                class: 'pending-tenant',
+                action: '/dashboard#pendingTenants'
+            });
+        }
+        
+        // Pending Payments (for admins, sub-admins, and agents)
+        if (counts.pending_payments > 0 && ['Super Administrator', 'Administrator', 'Sub-Administrator', 'Agent'].includes(userRole)) {
+            hasNotifications = true;
+            let description = 'Tenants awaiting payment verification';
+            if (userRole === 'Agent') {
+                description = 'Your tenants awaiting payment verification';
+            } else if (userRole === 'Sub-Administrator') {
+                description = 'Tenants under your management awaiting payment verification';
+            }
+            items.push({
+                icon: '💳',
+                title: `${counts.pending_payments} Pending Payment${counts.pending_payments > 1 ? 's' : ''}`,
+                description: description,
+                badge: counts.pending_payments,
+                class: 'pending-payment',
+                action: '/dashboard#pendingPayments'
+            });
+        }
+        
+        // Unread Messages (all users)
+        if (counts.unread_messages > 0) {
+            hasNotifications = true;
+            items.push({
+                icon: '💬',
+                title: `${counts.unread_messages} Unread Message${counts.unread_messages > 1 ? 's' : ''}`,
+                description: 'New chat messages from users',
+                badge: counts.unread_messages,
+                class: 'unread-message',
+                action: '/dashboard#chat'
+            });
+        }
+        
+        // Build the dropdown HTML
+        if (!hasNotifications) {
+            list.innerHTML = `
+                <div class="notification-empty">
+                    <i class="fas fa-bell-slash"></i>
+                    <p>All caught up! No notifications.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        items.forEach(item => {
+            html += `
+                <div class="notification-dropdown-item ${item.class}" onclick="handleNotificationClick('${item.action}')">
+                    <span class="icon">${item.icon}</span>
+                    <div class="content">
+                        <div class="title">${item.title}</div>
+                        <div class="description">${item.description}</div>
+                    </div>
+                    <span class="badge-count">${item.badge}</span>
+                </div>
+            `;
+        });
+        
+        list.innerHTML = html;
+    }
+
+    // Handle notification click
+    function handleNotificationClick(action) {
+        // Close dropdown
+        document.getElementById('notificationDropdown').classList.remove('show');
+        
+        // Navigate to the action URL
+        if (action && action !== '#') {
+            window.location.href = action;
+        }
+    }
+    
+    // Toggle notification dropdown
+    function toggleNotificationDropdown(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const dropdown = document.getElementById('notificationDropdown');
+        dropdown.classList.toggle('show');
+        
+        // If opening, refresh the counts
+        if (dropdown.classList.contains('show')) {
+            updateNotificationBadge();
+        }
+    }
+    
+    // Mark all notifications as read
+    async function markAllAsRead(event) {
+        if (event) {
+            event.stopPropagation();
+        }
+        
+        try {
+            const response = await fetch('/api/admin/mark_notifications_read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                updateNotificationBadge();
+                // Close dropdown
+                document.getElementById('notificationDropdown').classList.remove('show');
+                // Show toast notification
+                showToast('✅ All notifications marked as read', 'success');
+            }
+        } catch (error) {
+            console.error('Error marking notifications as read:', error);
+        }
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const container = document.querySelector('.notification-badge-container');
+        const dropdown = document.getElementById('notificationDropdown');
+        
+        if (container && dropdown && !container.contains(event.target)) {
+            dropdown.classList.remove('show');
+        }
+    });
+    
+    // ============================================
+    // TOAST NOTIFICATION (if not already defined)
+    // ============================================
+    function showToast(message, type = 'success') {
+        // Remove existing toast
+        const existing = document.querySelector('.toast-notification');
+        if (existing) existing.remove();
+        
+        const colors = {
+            success: '#10B981',
+            error: '#EF4444',
+            warning: '#F59E0B',
+            info: '#8B5CF6'
+        };
+        
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 99999;
+            border-left: 4px solid ${colors[type] || '#8B5CF6'};
+            max-width: 450px;
+            animation: slideIn 0.3s ease;
+            font-family: Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        `;
+        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        toast.innerHTML = `
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <span style="font-size:1.25rem;">${icons[type] || 'ℹ️'}</span>
+                <span style="white-space:pre-line;">${message}</span>
+            </div>
+            <button onclick="this.parentElement.remove()" 
+                    style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#9CA3AF; padding:0 0 0 1rem;">
+                ×
+            </button>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+    }
+
+    // ============================================
+    // FORM SUBMISSION WITH SPINNER
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        // Login form
+        const loginForm = document.querySelector('form[action="/api/auth/login"]');
+        if (loginForm) {
+            loginForm.addEventListener('submit', function(e) {
+                showSpinner('Logging in...', 'Please wait while we verify your credentials');
+            });
+        }
+        
+        // Signup form
+        const signupForm = document.getElementById('signupForm');
+        if (signupForm) {
+            signupForm.addEventListener('submit', function(e) {
+                showSpinner('Creating your account...', 'Please wait while we set up your profile');
+            });
+        }
+        
+        // Initialize notification badge
+        {% if session_token %}
+        updateNotificationBadge();
+        // Update every 30 seconds
+        setInterval(updateNotificationBadge, 30000);
+        {% endif %}
+    });
+    
+    // Update when page becomes visible again
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            {% if session_token %}
+            updateNotificationBadge();
+            {% endif %}
+        }
+    });
+    
+    // Menu toggle function
+    function toggleMenu() {
+        const menu = document.getElementById('navMenu');
+        if (menu) {
+            menu.classList.toggle('active');
+        }
+    }
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', function(event) {
+        const menu = document.getElementById('navMenu');
+        const toggle = document.querySelector('.nav-toggle');
+        if (menu && toggle) {
+            if (!menu.contains(event.target) && !toggle.contains(event.target)) {
+                menu.classList.remove('active');
+            }
+        }
+    });
+    
+    // Navigation functions
+    function showHelp() {
+        alert('❓ Help Center\n\nXtopus Property Management System\n\nFor assistance, please contact:\nEmail: geocorpsys@gmail.com\nPhone: 09038197586');
+    }
+    
+    function showAbout() {
+        alert('🐙 About Xtopus\n\nXtopus is a holistic property rental management system designed to make managing properties refreshing and relaxing again.\n\nThe name comes from the Octopus with its 8 tentacles, symbolizing organized and coordinated connections.\n\nVersion: 1.0.0\n© 2026 Xtopus');
+    }
+    
+    function showContact() {
+        alert('📧 Contact Us\n\nEmail: geocorpsys@gmail.com\nTelephone: 09038197586\n\nWe\'d love to hear from you!');
+    }
+    
+    // Check if user is logged in
+    function checkAuth() {
+        const token = document.cookie.split('; ').find(row => row.startsWith('session_token='));
+        return !!token;
+    }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

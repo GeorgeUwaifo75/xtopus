@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Xtopus{% endblock %}
+
+{% block content %}
+<div style="max-width:400px; margin:2rem auto; background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+    <h2 style="text-align:center; margin-bottom:1.5rem;">Login to Xtopus</h2>
+    
+    {% if success %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">{{ success }}</div>
+    {% endif %}
+    
+    <form action="/api/auth/login" method="post" id="loginForm">
+        <div style="margin-bottom:1rem;">
+            <label style="display:block; margin-bottom:0.5rem;">User ID</label>
+            <input type="text" name="user_id" id="loginUserId" required style="width:100%; padding:0.75rem; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="margin-bottom:1.5rem;">
+            <label style="display:block; margin-bottom:0.5rem;">Password</label>
+            <input type="password" name="password" id="loginPassword" required style="width:100%; padding:0.75rem; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <button type="submit" class="btn btn-primary" id="loginButton" style="width:100%;">
+            Login
+        </button>
+    </form>
+    <p style="text-align:center; margin-top:1rem;">
+        Don't have an account? <a href="/signup" style="color:#8B5CF6;">Sign up</a>
+    </p>
+</div>
+
+<script>
+document.getElementById('loginForm')?.addEventListener('submit', function(e) {
+    const button = document.getElementById('loginButton');
+    const userId = document.getElementById('loginUserId').value;
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!userId || !password) {
+        e.preventDefault();
+        alert('Please enter both User ID and Password');
+        return;
+    }
+    
+    // Show spinner on button
+    const originalText = button.textContent;
+    button.innerHTML = '<span class="spinner-small"></span> Logging in...';
+    button.disabled = true;
+    button.classList.add('btn-loading');
+    
+    // The form will submit and redirect
+});
+</script>
+{% endblock %}
