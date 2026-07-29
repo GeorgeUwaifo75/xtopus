@@ -1,0 +1,25 @@
+# .gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.env
+.env.local
+.env.*.local
+*.log
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+.vscode/
+.idea/
+firebase-credentials.json
+*.db
+*.sqlite
+.venv/
