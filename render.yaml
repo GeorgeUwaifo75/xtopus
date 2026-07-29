@@ -9,3 +9,31 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: PORT
+        value: 8000
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FIREBASE_STORAGE_BUCKET
+        value: giteksolhub-project.firebasestorage.app
+      - key: EMAILJS_SERVICE_ID
+        value: service_78wp8b9
+      - key: EMAILJS_TEMPLATE_ID
+        value: template_06fjijo
+      - key: EMAILJS_PUBLIC_KEY
+        value: VGj6eL5SaKXRW2fIi
+      - key: EMAILJS_PRIVATE_KEY
+        value: oogPO4beeg5UpY1k-Y-UA
+      - key: FIREBASE_API_KEY
+        value: AIzaSyBj9wQ04hnfPjowVvEa_yf8_Fq3VXVaH5I
+      - key: FIREBASE_AUTH_DOMAIN
+        value: giteksolhub-project.firebaseapp.com
+      - key: FIREBASE_PROJECT_ID
+        value: giteksolhub-project
+      - key: FIREBASE_MESSAGING_SENDER_ID
+        value: 917911843059
+      - key: FIREBASE_APP_ID
+        value: 1:917911843059:web:0aa2438be6605d1f400786
+      - key: FIREBASE_CREDENTIALS_BASE64
+        sync: false
