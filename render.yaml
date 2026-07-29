@@ -1,25 +1,15 @@
 services:
   - type: web
     name: xtopus
-    runtime: docker
+    runtime: python
     region: frankfurt
     plan: free
     branch: main
-    dockerfilePath: ./Dockerfile
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: PORT
         value: 8000
-      - key: ENVIRONMENT
-        value: production
-      - key: SECRET_KEY
-        generateValue: true
-      - key: FIREBASE_STORAGE_BUCKET
-        value: giteksolhub-project.firebasestorage.app
-      - key: EMAILJS_SERVICE_ID
-        value: service_78wp8b9
-      - key: EMAILJS_TEMPLATE_ID
-        value: template_06fjijo
-      - key: EMAILJS_PUBLIC_KEY
-        value: VGj6eL5SaKXRW2fIi
-      - key: EMAILJS_PRIVATE_KEY
-        value: oogPO4beeg5UpY1k-Y-UA
