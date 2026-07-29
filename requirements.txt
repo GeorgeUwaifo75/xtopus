@@ -1,3 +1,4 @@
+# Use specific versions that have pre-built wheels
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
@@ -8,7 +9,11 @@ requests==2.31.0
 httpx==0.25.0
 jinja2==3.1.2
 email-validator==2.1.0
-pydantic==2.5.0
+
+# Use pydantic 2.4.2 instead of 2.5.0 (has pre-built wheels)
+pydantic==2.4.2
+
+# Force pre-built wheels
 aiofiles==23.2.1
 firebase-admin==6.4.0
 bcrypt==4.0.1
