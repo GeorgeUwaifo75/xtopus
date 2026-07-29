@@ -2,10 +2,16 @@ services:
   - type: web
     name: xtopus
     runtime: python
-    region: frankfurt  # Choose: frankfurt, ohio, oregon, singapore, sydney
-    plan: free  # or starter, professional
+    region: frankfurt
+    plan: free
     branch: main
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      # Install Rust
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source "$HOME/.cargo/env"
+      # Install Python dependencies
+      pip install -r requirements.txt
+      # Install additional Python packages if needed
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
