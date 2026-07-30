@@ -3659,12 +3659,11 @@ async def get_user_payment_status(request: Request):
             content={"success": False, "detail": str(e)}
         )    
     
-# ============================================
-# UPGRADE USER PLAN
-# ============================================
+# Add or update the upgrade_user_plan endpoint to use Paystack reference:
+
 @router.post("/upgrade_user_plan")
 async def upgrade_user_plan(request: Request):
-    """Upgrade a user from free to paid plan"""
+    """Upgrade a user from free to paid plan (called after Paystack verification)"""
     try:
         current_user = get_current_user(request)
         if not current_user:
@@ -3676,11 +3675,40 @@ async def upgrade_user_plan(request: Request):
         body = await request.json()
         payment_reference = body.get("payment_reference")
         amount = body.get("amount")
+        plan_type = body.get("plan_type", "monthly")
         
         if not payment_reference:
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "detail": "Payment reference is required"}
+            )
+        
+        # Verify payment with Paystack
+        import requests
+        PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY', 'sk_test_xxx')
+        
+        headers = {
+            "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        verify_response = requests.get(
+            f"https://api.paystack.co/transaction/verify/{payment_reference}",
+            headers=headers,
+            timeout=30
+        )
+        
+        if verify_response.status_code != 200:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to verify payment with Paystack"}
+            )
+        
+        verify_data = verify_response.json()
+        if not verify_data.get("status"):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Payment verification failed"}
             )
         
         # Update user's payment status
@@ -3698,9 +3726,17 @@ async def upgrade_user_plan(request: Request):
             )
         
         target_user["payment_status"] = "paid"
+        target_user["plan_type"] = plan_type
         target_user["upgraded_at"] = datetime.now().isoformat()
         target_user["payment_reference"] = payment_reference
-        target_user["upgrade_amount"] = amount or 10000
+        target_user["upgrade_amount"] = amount or (15000 if plan_type == "monthly" else 162000)
+        
+        # Set expiry
+        from datetime import timedelta
+        if plan_type == "monthly":
+            target_user["plan_expiry"] = (datetime.now() + timedelta(days=30)).isoformat()
+        else:
+            target_user["plan_expiry"] = (datetime.now() + timedelta(days=365)).isoformat()
         
         success = db.update_collection_item("users", target_user.get("_id"), target_user)
         
@@ -3708,7 +3744,7 @@ async def upgrade_user_plan(request: Request):
             create_notification(
                 current_user.get("user_id"),
                 "plan_upgraded",
-                f"🎉 Your plan has been upgraded to PAID! You now have unlimited access."
+                f"🎉 Your plan has been upgraded to PAID ({plan_type})! You now have unlimited access."
             )
             
             return JSONResponse({
@@ -3726,4 +3762,4 @@ async def upgrade_user_plan(request: Request):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        )    
+        )
