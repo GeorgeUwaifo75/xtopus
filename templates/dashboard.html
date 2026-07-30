@@ -340,7 +340,7 @@
     </div>
     {% endif %}
     
-    <!-- Payment Section for Approved Tenants (Pending Payment) -->
+    <!-- Payment Section for Approved Tenants (Pending Payment) - Updated with Paystack -->
 {% if user.user_category == "Tenant" and user.tenant_status == "pending_payment" %}
 <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
     <h3>💳 Payment Required</h3>
@@ -356,11 +356,11 @@
     </div>
     
     <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
-        <button onclick="initializePaymentWithPaystack('{{ user.email }}', {{ user.rent_amount|default(0) }}, '{{ user.user_id }}')" class="btn btn-primary" style="background:#8B5CF6;">
-            💳 Pay with Paystack
+        <button onclick="payRentWithPaystack()" class="btn btn-primary pay-rent-btn" style="background:#8B5CF6;">
+            💳 Pay Rent Now
         </button>
         <button onclick="confirmPaymentMade()" class="btn btn-primary" style="background:#10B981;">
-            ✅ I've Made Payment
+            ✅ I've Made Payment (Offline)
         </button>
     </div>
     <div id="paymentResult" style="margin-top:1rem;"></div>
@@ -1843,7 +1843,7 @@ async function loadPropertyChats(propertyId) {
 
 
 // ============================================
-// LOAD PAYMENT STATUS AND USAGE
+// LOAD PAYMENT STATUS AND USAGE (Updated with Paystack)
 // ============================================
 async function loadPaymentStatus() {
     const container = document.getElementById('paymentStatusContainer');
@@ -1869,10 +1869,12 @@ async function loadPaymentStatus() {
                                 ${data.message}
                             </p>
                         </div>
-                        ${isFree ? `
-                            <button onclick="showUpgradePrompt()" class="btn btn-primary" style="background:#8B5CF6;">
-                                ⬆️ Upgrade Plan
-                            </button>
+                        ${isFree && '{{ user.user_category }}' in ['Super Administrator', 'Administrator'] ? `
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                <button onclick="showUpgradePrompt()" class="btn btn-primary" style="background:#8B5CF6;">
+                                    ⬆️ Upgrade Plan
+                                </button>
+                            </div>
                         ` : ''}
                     </div>
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:0.5rem; margin-top:1rem; padding-top:0.5rem; border-top:1px solid ${isFree ? '#FDE68A' : '#A7F3D0'};">
@@ -1912,33 +1914,71 @@ async function loadPaymentStatus() {
 }
 
 // ============================================
-// SHOW UPGRADE PROMPT
+// SHOW UPGRADE PROMPT (With Paystack Plans)
 // ============================================
-function showUpgradePrompt() {
+async function showUpgradePrompt() {
     const container = document.getElementById('paymentStatusContainer');
     if (!container) return;
     
-    container.innerHTML += `
-        <div style="margin-top:1rem; padding:1rem; border:2px solid #8B5CF6; border-radius:8px; background:#f5f3ff;">
-            <h4 style="color:#8B5CF6;">⬆️ Upgrade Your Plan</h4>
-            <p>Upgrade to a Paid Plan to enjoy unlimited access:</p>
-            <ul style="margin:0.5rem 0 0.5rem 1.5rem;">
-                <li>Unlimited buildings</li>
-                <li>Unlimited properties</li>
-                <li>Unlimited tenant assignments</li>
-                <li>Priority support</li>
-            </ul>
-            <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.5rem;">
-                <button onclick="simulateUpgrade()" class="btn btn-primary" style="background:#10B981;">
-                    💳 Upgrade Now (₦10,000/year)
-                </button>
-                <button onclick="document.querySelector('#paymentStatusContainer .upgrade-prompt').remove()" class="btn btn-secondary">
-                    Cancel
-                </button>
+    try {
+        // Get payment plans
+        const response = await fetch('/api/payments/get_payment_plans');
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast('❌ Failed to load payment plans', 'error');
+            return;
+        }
+        
+        const plans = data.plans;
+        const isPaid = data.is_paid || false;
+        
+        if (isPaid) {
+            showToast('You are already on a paid plan!', 'info');
+            return;
+        }
+        
+        let plansHtml = '';
+        for (const [key, plan] of Object.entries(plans)) {
+            if (key === 'free') continue;
+            plansHtml += `
+                <div style="border:2px solid #e0e0e0; border-radius:8px; padding:1.5rem; text-align:center; flex:1; min-width:200px; background:white;">
+                    <h4 style="color:#8B5CF6;">${plan.name}</h4>
+                    <div style="font-size:2rem; font-weight:bold; color:#8B5CF6; margin:0.5rem 0;">
+                        ${plan.price_display}
+                    </div>
+                    <ul style="list-style:none; padding:0; text-align:left; margin:1rem 0;">
+                        ${plan.features.map(f => `<li style="padding:0.25rem 0; display:flex; align-items:center; gap:0.5rem;">✅ ${f}</li>`).join('')}
+                    </ul>
+                    ${plan.savings ? `<div style="color:#10B981; font-size:0.9rem; margin-bottom:0.5rem;">${plan.savings}</div>` : ''}
+                    <button onclick="upgradePlanWithPaystack('${key}')" 
+                            class="btn btn-primary upgrade-plan-btn" 
+                            style="background:#8B5CF6; width:100%;">
+                        Choose ${plan.name}
+                    </button>
+                </div>
+            `;
+        }
+        
+        container.innerHTML += `
+            <div style="margin-top:1rem; padding:1rem; border:2px solid #8B5CF6; border-radius:8px; background:#f5f3ff;">
+                <h4 style="color:#8B5CF6;">⬆️ Upgrade Your Plan</h4>
+                <p>Choose a plan to unlock unlimited features:</p>
+                <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+                    ${plansHtml}
+                </div>
+                <div style="margin-top:1rem;">
+                    <button onclick="document.querySelector('#paymentStatusContainer .upgrade-prompt').remove()" class="btn btn-secondary">
+                        Cancel
+                    </button>
+                </div>
+                <div id="upgradeResult" style="margin-top:0.5rem;"></div>
             </div>
-            <div id="upgradeResult" style="margin-top:0.5rem;"></div>
-        </div>
-    `;
+        `;
+    } catch (error) {
+        console.error('Error loading plans:', error);
+        showToast('❌ Error loading payment plans', 'error');
+    }
 }
 
 // ============================================
@@ -2176,6 +2216,203 @@ async function processRoleUpgrade(userId, action, requestedRole) {
         window._rejectionReason = null;
     }
 }
+
+// Add this to the dashboard.html script section
+
+// ============================================
+// PAYSTACK PAYMENT INTEGRATION
+// ============================================
+
+// Load Paystack script dynamically
+function loadPaystackScript() {
+    return new Promise((resolve, reject) => {
+        if (window.PaystackPop) {
+            resolve();
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://js.paystack.co/v1/inline.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+// Initialize Paystack Payment
+async function initializePaystackPayment(paymentType, amount, email, metadata) {
+    try {
+        // Load Paystack script if not loaded
+        await loadPaystackScript();
+        
+        // Get public key
+        const keyResponse = await fetch('/api/payments/get_paystack_public_key');
+        const keyData = await keyResponse.json();
+        
+        if (!keyData.success) {
+            showToast('❌ Failed to load payment configuration', 'error');
+            return;
+        }
+        
+        // Initialize payment on server
+        const response = await fetch('/api/payments/initialize_payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                payment_type: paymentType,
+                amount: amount,
+                email: email,
+                user_id: '{{ user.user_id }}',
+                property_id: metadata?.property_id || null,
+                payment_plan: metadata?.payment_plan || 'monthly',
+                callback_url: window.location.href
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast('❌ ' + (data.detail || 'Payment initialization failed'), 'error');
+            return;
+        }
+        
+        // Open Paystack popup
+        const handler = PaystackPop.setup({
+            key: keyData.public_key,
+            email: email,
+            amount: amount * 100,
+            currency: 'NGN',
+            ref: data.data.reference,
+            metadata: {
+                payment_type: paymentType,
+                user_id: '{{ user.user_id }}',
+                ...metadata
+            },
+            callback: function(response) {
+                // Payment successful - verify on server
+                verifyPayment(response.reference, paymentType);
+            },
+            onClose: function() {
+                showToast('Payment cancelled', 'warning');
+                // Update UI to remove loading state
+                hidePaymentLoading();
+            }
+        });
+        
+        handler.openIframe();
+        
+    } catch (error) {
+        console.error('Error initializing payment:', error);
+        showToast('❌ Error: ' + error.message, 'error');
+        hidePaymentLoading();
+    }
+}
+
+// Verify payment after callback
+async function verifyPayment(reference, paymentType) {
+    try {
+        showToast('⏳ Verifying payment...', 'info');
+        
+        const response = await fetch(`/api/payments/verify_payment/${reference}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('✅ Payment successful!', 'success');
+            
+            if (paymentType === 'plan_upgrade') {
+                // Reload payment status
+                setTimeout(() => {
+                    loadPaymentStatus();
+                    location.reload();
+                }, 2000);
+            } else if (paymentType === 'rent') {
+                // Reload tenant status
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            }
+        } else {
+            showToast('❌ Payment verification failed: ' + (data.detail || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Error verifying payment:', error);
+        showToast('❌ Error verifying payment: ' + error.message, 'error');
+    }
+}
+
+// Hide payment loading states
+function hidePaymentLoading() {
+    const spinners = document.querySelectorAll('.payment-spinner');
+    spinners.forEach(el => el.style.display = 'none');
+}
+
+// ============================================
+// UPGRADE PLAN WITH PAYSTACK
+// ============================================
+async function upgradePlanWithPaystack(planType) {
+    const userEmail = '{{ user.email }}';
+    const planPrices = {
+        monthly: 15000,
+        annual: 162000
+    };
+    
+    const amount = planPrices[planType];
+    if (!amount) {
+        showToast('❌ Invalid plan selected', 'error');
+        return;
+    }
+    
+    const planNames = {
+        monthly: 'Monthly Plan',
+        annual: 'Annual Plan'
+    };
+    
+    if (!confirm(`You are about to upgrade to the ${planNames[planType]} for ₦${amount.toLocaleString()}. Continue?`)) {
+        return;
+    }
+    
+    // Show loading state
+    const button = document.querySelector('.upgrade-plan-btn');
+    if (button) {
+        showButtonSpinner(button);
+    }
+    
+    await initializePaystackPayment('plan_upgrade', amount, userEmail, {
+        payment_plan: planType,
+        plan_name: planNames[planType]
+    });
+}
+
+// ============================================
+// PAY RENT WITH PAYSTACK
+// ============================================
+async function payRentWithPaystack() {
+    const userEmail = '{{ user.email }}';
+    const rentAmount = {{ user.rent_amount|default(0) }};
+    const propertyId = '{{ user.assigned_property_id }}';
+    const propertyName = '{{ user.assigned_property_name or "Property" }}';
+    
+    if (!rentAmount || rentAmount <= 0) {
+        showToast('❌ Invalid rent amount. Please contact support.', 'error');
+        return;
+    }
+    
+    if (!confirm(`You are about to pay rent of ₦${rentAmount.toLocaleString()} for ${propertyName}. Continue?`)) {
+        return;
+    }
+    
+    // Show loading state
+    const button = document.querySelector('.pay-rent-btn');
+    if (button) {
+        showButtonSpinner(button);
+    }
+    
+    await initializePaystackPayment('rent', rentAmount, userEmail, {
+        property_id: propertyId,
+        property_name: propertyName,
+        user_id: '{{ user.user_id }}'
+    });
+}
+
 
 </script>
 <style>
