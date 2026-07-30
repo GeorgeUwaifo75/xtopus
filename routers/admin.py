@@ -11,6 +11,7 @@ from firebase_admin import credentials, storage, initialize_app
 from firebase_admin import auth as firebase_auth
 import tempfile
 import json
+import base64
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ from database import db
 from security import security
 from models.user import UserCategory
 
-# Firebase Configuration from .env
+ # Firebase Configuration from .env
 FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY', 'AIzaSyBj9wQ04hnfPjowVvEa_yf8_Fq3VXVaH5I')
 FIREBASE_AUTH_DOMAIN = os.getenv('FIREBASE_AUTH_DOMAIN', 'giteksolhub-project.firebaseapp.com')
 FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', 'giteksolhub-project')
@@ -27,42 +28,6 @@ FIREBASE_STORAGE_BUCKET = os.getenv('FIREBASE_STORAGE_BUCKET', 'giteksolhub-proj
 FIREBASE_MESSAGING_SENDER_ID = os.getenv('FIREBASE_MESSAGING_SENDER_ID', '917911843059')
 FIREBASE_APP_ID = os.getenv('FIREBASE_APP_ID', '1:917911843059:web:0aa2438be6605d1f400786')
 
-# Initialize Firebase
-try:
-    try:
-        firebase_admin.get_app()
-        logger.info("Firebase already initialized")
-    except ValueError:
-        firebase_cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json')
-        if os.path.exists(firebase_cred_path):
-            cred = credentials.Certificate(firebase_cred_path)
-            firebase_admin.initialize_app(cred, {
-                'storageBucket': FIREBASE_STORAGE_BUCKET
-            })
-            logger.info(f"Firebase initialized successfully")
-        else:
-            private_key = os.getenv('FIREBASE_PRIVATE_KEY', '')
-            if private_key:
-                cred = credentials.Certificate({
-                    "type": "service_account",
-                    "project_id": FIREBASE_PROJECT_ID,
-                    "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID', ''),
-                    "private_key": private_key.replace('\\n', '\n'),
-                    "client_email": os.getenv('FIREBASE_CLIENT_EMAIL', ''),
-                    "client_id": os.getenv('FIREBASE_CLIENT_ID', ''),
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_CERT_URL', '')
-                })
-                firebase_admin.initialize_app(cred, {
-                    'storageBucket': FIREBASE_STORAGE_BUCKET
-                })
-                logger.info(f"Firebase initialized successfully")
-            else:
-                logger.warning("No Firebase credentials found.")
-except Exception as e:
-    logger.error(f"Firebase initialization error: {e}")
 
 # EmailJS Configuration
 EMAILJS_SERVICE_ID = os.getenv('EMAILJS_SERVICE_ID', 'service_78wp8b9')
@@ -70,6 +35,116 @@ EMAILJS_TEMPLATE_ID = os.getenv('EMAILJS_TEMPLATE_ID', 'template_06fjijo')
 EMAILJS_PUBLIC_KEY = os.getenv('EMAILJS_PUBLIC_KEY', 'VGj6eL5SaKXRW2fIi')
 EMAILJS_PRIVATE_KEY = os.getenv('EMAILJS_PRIVATE_KEY', 'oogPO4beeg5UpY1k-Y-UA')
 EMAILJS_API_URL = 'https://api.emailjs.com/api/v1.0/email/send'
+
+
+# # Initialize Firebase
+# try:
+#     try:
+#         firebase_admin.get_app()
+#         logger.info("Firebase already initialized")
+#     except ValueError:
+#         firebase_cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json')
+#         if os.path.exists(firebase_cred_path):
+#             cred = credentials.Certificate(firebase_cred_path)
+#             firebase_admin.initialize_app(cred, {
+#                 'storageBucket': FIREBASE_STORAGE_BUCKET
+#             })
+#             logger.info(f"Firebase initialized successfully")
+#         else:
+#             private_key = os.getenv('FIREBASE_PRIVATE_KEY', '')
+#             if private_key:
+#                 cred = credentials.Certificate({
+#                     "type": "service_account",
+#                     "project_id": FIREBASE_PROJECT_ID,
+#                     "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID', ''),
+#                     "private_key": private_key.replace('\\n', '\n'),
+#                     "client_email": os.getenv('FIREBASE_CLIENT_EMAIL', ''),
+#                     "client_id": os.getenv('FIREBASE_CLIENT_ID', ''),
+#                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+#                     "token_uri": "https://oauth2.googleapis.com/token",
+#                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+#                     "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_CERT_URL', '')
+#                 })
+#                 firebase_admin.initialize_app(cred, {
+#                     'storageBucket': FIREBASE_STORAGE_BUCKET
+#                 })
+#                 logger.info(f"Firebase initialized successfully")
+#             else:
+#                 logger.warning("No Firebase credentials found.")
+# except Exception as e:
+#     logger.error(f"Firebase initialization error: {e}")
+
+# ============================================
+# FIREBASE INITIALIZATION (with Base64 support)
+# ============================================
+
+
+
+def initialize_firebase():
+    """Initialize Firebase from environment variables"""
+    try:
+        # Check if Firebase is already initialized
+        try:
+            firebase_admin.get_app()
+            logger.info("Firebase already initialized")
+            return
+        except ValueError:
+            pass
+        
+        # Try Base64 encoded credentials first (for Render)
+        firebase_cred_base64 = os.getenv('FIREBASE_CREDENTIALS_BASE64')
+        if firebase_cred_base64:
+            try:
+                cred_json = base64.b64decode(firebase_cred_base64).decode('utf-8')
+                cred_dict = json.loads(cred_json)
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred, {
+                    'storageBucket': FIREBASE_STORAGE_BUCKET
+                })
+                logger.info("✅ Firebase initialized from Base64 credentials")
+                return
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize Firebase from Base64: {e}")
+        
+        # Try file-based initialization
+        firebase_cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json')
+        if os.path.exists(firebase_cred_path):
+            cred = credentials.Certificate(firebase_cred_path)
+            firebase_admin.initialize_app(cred, {
+                'storageBucket': FIREBASE_STORAGE_BUCKET
+            })
+            logger.info(f"✅ Firebase initialized from file: {firebase_cred_path}")
+            return
+        
+        # Try individual environment variables
+        private_key = os.getenv('FIREBASE_PRIVATE_KEY', '')
+        if private_key:
+            cred = credentials.Certificate({
+                "type": "service_account",
+                "project_id": FIREBASE_PROJECT_ID,
+                "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID', ''),
+                "private_key": private_key.replace('\\n', '\n'),
+                "client_email": os.getenv('FIREBASE_CLIENT_EMAIL', ''),
+                "client_id": os.getenv('FIREBASE_CLIENT_ID', ''),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_CERT_URL', '')
+            })
+            firebase_admin.initialize_app(cred, {
+                'storageBucket': FIREBASE_STORAGE_BUCKET
+            })
+            logger.info("✅ Firebase initialized from environment variables")
+            return
+        
+        logger.warning("❌ No Firebase credentials found.")
+        
+    except Exception as e:
+        logger.error(f"❌ Firebase initialization error: {e}")
+
+# Call the function
+initialize_firebase()
+
 
 
 # Allowed image types
