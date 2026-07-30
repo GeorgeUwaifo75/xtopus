@@ -288,12 +288,32 @@ async def request_tenant_assignment(request: Request):
                 content={"success": False, "detail": "User not found"}
             )
         
+        # After getting current_user, add this usage check:
+        user_id = current_user.get("user_id")
+        payment_status = current_user.get("payment_status", "free")
+        
+        # Count existing tenants assigned by this user
+        users = db.get_collection("users")
+        existing_tenants = [u for u in users if u.get("tenant_assigned_by") == user_id and u.get("user_category") == "Tenant"]
+        
+        # Check if free user has reached limit
+        if payment_status == "free" and len(existing_tenants) >= 1:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "success": False, 
+                    "detail": "Free plan users can only assign 1 tenant. Please upgrade your plan to assign more."
+                }
+            )
+        
         # Check if user is already a tenant
         if target_user.get("user_category") == "Tenant" or target_user.get("tenant_status") in ["active", "pending", "pending_payment"]:
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "detail": "User is already a tenant or has a pending request"}
             )
+        
+        
         
         # Find property
         properties = db.get_collection("properties")
@@ -786,6 +806,7 @@ async def create_agent(request: Request):
             "profile_photo": None
         }
         
+        new_user["payment_status"] = current_user.get("payment_status", "free")
         success = db.add_to_collection("users", new_user)
         
         if success:
@@ -930,6 +951,7 @@ async def create_sub_admin(request: Request):
             }
         }
         
+        new_user["payment_status"] = current_user.get("payment_status", "free")
         success = db.add_to_collection("users", new_user)
         
         if success:
@@ -2718,6 +2740,24 @@ async def create_building(
                 content={"success": False, "detail": "All fields are required"}
             )
         
+        # After getting current_user, add this usage check:
+        user_id = current_user.get("user_id")
+        payment_status = current_user.get("payment_status", "free")
+        
+        # Count existing buildings created by this user
+        buildings = db.get_collection("buildings")
+        existing_buildings = [b for b in buildings if b.get("created_by") == user_id]
+        
+        # Check if free user has reached limit
+        if payment_status == "free" and len(existing_buildings) >= 1:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "success": False, 
+                    "detail": "Free plan users can only create 1 building. Please upgrade your plan to create more."
+                }
+            )
+        
         # Upload photos
         photo_urls = []
         if photos:
@@ -2873,6 +2913,24 @@ async def create_property(
             return JSONResponse(
                 status_code=403,
                 content={"success": False, "detail": "Only Administrators can create properties"}
+            )
+        
+        # After getting current_user, add this usage check:
+        user_id = current_user.get("user_id")
+        payment_status = current_user.get("payment_status", "free")
+        
+        # Count existing properties created by this user
+        properties = db.get_collection("properties")
+        existing_properties = [p for p in properties if p.get("created_by") == user_id]
+        
+        # Check if free user has reached limit
+        if payment_status == "free" and len(existing_properties) >= 1:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "success": False, 
+                    "detail": "Free plan users can only create 1 property. Please upgrade your plan to create more."
+                }
             )
         
         # Validate required fields
@@ -3110,3 +3168,562 @@ async def mark_notifications_read(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
+    
+# Add these new endpoints to admin.py after the existing ones
+
+# ============================================
+# GET USER PAYMENT STATUS AND USAGE COUNTS
+# ============================================
+@router.get("/get_user_usage_counts")
+async def get_user_usage_counts(request: Request):
+    """Get the usage counts for the current user (buildings, properties, tenants created)"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        user_id = current_user.get("user_id")
+        payment_status = current_user.get("payment_status", "free")
+        
+        # Count buildings created by this user
+        buildings = db.get_collection("buildings")
+        buildings_count = len([b for b in buildings if b.get("created_by") == user_id])
+        
+        # Count properties created by this user
+        properties = db.get_collection("properties")
+        properties_count = len([p for p in properties if p.get("created_by") == user_id])
+        
+        # Count tenants assigned by this user (users with tenant_status and assigned_by this user)
+        users = db.get_collection("users")
+        tenants_count = len([u for u in users if u.get("tenant_assigned_by") == user_id and u.get("user_category") == "Tenant"])
+        
+        return JSONResponse({
+            "success": True,
+            "payment_status": payment_status,
+            "usage": {
+                "buildings": buildings_count,
+                "properties": properties_count,
+                "tenants": tenants_count,
+                "max_buildings": 1 if payment_status == "free" else 999,
+                "max_properties": 1 if payment_status == "free" else 999,
+                "max_tenants": 1 if payment_status == "free" else 999,
+                "is_free": payment_status == "free"
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user usage counts: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# REQUEST ROLE UPGRADE (Regular User)
+# ============================================
+@router.post("/request_role_upgrade")
+async def request_role_upgrade(request: Request):
+    """Regular user requests to be upgraded to a higher role"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        body = await request.json()
+        requested_role = body.get("requested_role")
+        reason = body.get("reason", "")
+        
+        if not requested_role:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Requested role is required"}
+            )
+        
+        # Only regular users can request upgrades
+        user_category = current_user.get("user_category", "User")
+        if user_category != "User":
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Only regular users can request role upgrades"}
+            )
+        
+        # Valid roles to upgrade to
+        valid_roles = ["Administrator", "Sub-Administrator", "Agent", "Tenant"]
+        if requested_role not in valid_roles:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": f"Invalid role. Must be one of: {', '.join(valid_roles)}"}
+            )
+        
+        # Check if there's already a pending request
+        users = db.get_collection("users")
+        target_user = None
+        for u in users:
+            if u.get("user_id") == current_user.get("user_id"):
+                target_user = u
+                break
+        
+        if target_user.get("role_upgrade_request"):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "You already have a pending role upgrade request"}
+            )
+        
+        # Create the request
+        target_user["role_upgrade_request"] = {
+            "requested_role": requested_role,
+            "reason": reason,
+            "status": "pending",
+            "requested_at": datetime.now().isoformat(),
+            "request_id": f"upgrade_{int(datetime.now().timestamp())}"
+        }
+        
+        success = db.update_collection_item("users", target_user.get("_id"), target_user)
+        
+        if success:
+            # Notify all administrators
+            admins = [u for u in users if u.get("user_category") in ["Super Administrator", "Administrator"]]
+            for admin in admins:
+                create_notification(
+                    admin.get("user_id"),
+                    "role_upgrade_request",
+                    f"📋 {current_user.get('user_id')} has requested to be upgraded to {requested_role}. Reason: {reason}",
+                    {
+                        "user_id": current_user.get("user_id"),
+                        "requested_role": requested_role,
+                        "reason": reason,
+                        "request_id": target_user["role_upgrade_request"]["request_id"]
+                    }
+                )
+                
+                # Send email to admins
+                email_body = f"""
+Hello {admin.get('first_name', 'Admin')},
+
+A user has requested a role upgrade.
+
+User: {current_user.get('user_id')} ({current_user.get('first_name')} {current_user.get('last_name')})
+Requested Role: {requested_role}
+Reason: {reason}
+
+Please login to review and approve or reject this request.
+
+Regards,
+Xtopus Team
+"""
+                template_params = {
+                    'seller_email': admin.get("email"),
+                    'to_name': admin.get('first_name', 'Admin'),
+                    'name': 'Xtopus Property Management',
+                    'email': 'geocorpsys@gmail.com',
+                    'message': email_body,
+                    'subject': "Xtopus - Role Upgrade Request",
+                    'product_name': "Role Upgrade"
+                }
+                send_emailjs_notification(
+                    admin.get("email"),
+                    "Xtopus - Role Upgrade Request",
+                    email_body,
+                    template_params
+                )
+            
+            # Notify the user
+            create_notification(
+                current_user.get("user_id"),
+                "role_upgrade_submitted",
+                f"Your request to become a {requested_role} has been submitted. Awaiting administrator approval."
+            )
+            
+            return JSONResponse({
+                "success": True,
+                "message": f"Your request to become a {requested_role} has been submitted. Awaiting administrator approval.",
+                "request_id": target_user["role_upgrade_request"]["request_id"]
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to submit request"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error requesting role upgrade: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# GET ROLE UPGRADE REQUESTS (Admin)
+# ============================================
+@router.get("/get_role_upgrade_requests")
+async def get_role_upgrade_requests(request: Request):
+    """Administrators get all pending role upgrade requests"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        users = db.get_collection("users")
+        requests = []
+        
+        for u in users:
+            upgrade_req = u.get("role_upgrade_request")
+            if upgrade_req and upgrade_req.get("status") == "pending":
+                requests.append({
+                    "user_id": u.get("user_id"),
+                    "first_name": u.get("first_name"),
+                    "last_name": u.get("last_name"),
+                    "email": u.get("email"),
+                    "requested_role": upgrade_req.get("requested_role"),
+                    "reason": upgrade_req.get("reason", ""),
+                    "requested_at": upgrade_req.get("requested_at"),
+                    "request_id": upgrade_req.get("request_id")
+                })
+        
+        return JSONResponse({
+            "success": True,
+            "requests": requests,
+            "count": len(requests)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting role upgrade requests: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# APPROVE/REJECT ROLE UPGRADE (Admin)
+# ============================================
+@router.post("/process_role_upgrade")
+async def process_role_upgrade(request: Request):
+    """Administrator approves or rejects a role upgrade request"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        body = await request.json()
+        user_id = body.get("user_id")
+        action = body.get("action")  # "approve" or "reject"
+        requested_role = body.get("requested_role")
+        
+        if not user_id or not action:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "User ID and action are required"}
+            )
+        
+        users = db.get_collection("users")
+        target_user = None
+        target_index = -1
+        
+        for idx, u in enumerate(users):
+            if u.get("user_id") == user_id:
+                target_user = u
+                target_index = idx
+                break
+        
+        if not target_user:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "User not found"}
+            )
+        
+        upgrade_req = target_user.get("role_upgrade_request")
+        if not upgrade_req or upgrade_req.get("status") != "pending":
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "No pending upgrade request found for this user"}
+            )
+        
+        if action == "approve":
+            new_role = upgrade_req.get("requested_role")
+            if not new_role:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "detail": "No requested role found"}
+                )
+            
+            # Update the user's role
+            target_user["user_category"] = new_role
+            target_user["role_upgrade_request"]["status"] = "approved"
+            target_user["role_upgrade_request"]["processed_by"] = current_user.get("user_id")
+            target_user["role_upgrade_request"]["processed_at"] = datetime.now().isoformat()
+            target_user["upgraded_by"] = current_user.get("user_id")
+            target_user["upgraded_at"] = datetime.now().isoformat()
+            
+            # If upgrading to Tenant, set appropriate fields
+            if new_role == "Tenant":
+                target_user["tenant_status"] = "active"
+                target_user["activity_status"] = "Active"
+            
+            message = f"User {user_id} has been upgraded to {new_role} by {current_user.get('user_id')}"
+            
+            # Notify the user
+            create_notification(
+                user_id,
+                "role_upgrade_approved",
+                f"🎉 Your request to become a {new_role} has been APPROVED by {current_user.get('user_id')}!"
+            )
+            
+            # Send email to the user
+            email_body = f"""
+Hello {target_user.get('first_name', 'User')},
+
+🎉 Congratulations! Your request to become a {new_role} has been APPROVED.
+
+You can now login and access your new role features.
+
+Regards,
+Xtopus Team
+"""
+            template_params = {
+                'seller_email': target_user.get("email"),
+                'to_name': target_user.get('first_name', 'User'),
+                'name': 'Xtopus Property Management',
+                'email': 'geocorpsys@gmail.com',
+                'message': email_body,
+                'subject': f"Xtopus - Role Upgrade Approved: {new_role}",
+                'product_name': "Role Upgrade"
+            }
+            send_emailjs_notification(
+                target_user.get("email"),
+                f"Xtopus - Role Upgrade Approved: {new_role}",
+                email_body,
+                template_params
+            )
+            
+        elif action == "reject":
+            target_user["role_upgrade_request"]["status"] = "rejected"
+            target_user["role_upgrade_request"]["processed_by"] = current_user.get("user_id")
+            target_user["role_upgrade_request"]["processed_at"] = datetime.now().isoformat()
+            target_user["role_upgrade_request"]["rejection_reason"] = body.get("reason", "No reason provided")
+            
+            message = f"User {user_id}'s role upgrade request has been rejected by {current_user.get('user_id')}"
+            
+            # Notify the user
+            create_notification(
+                user_id,
+                "role_upgrade_rejected",
+                f"❌ Your request to become a {upgrade_req.get('requested_role')} has been REJECTED by {current_user.get('user_id')}."
+            )
+            
+            # Send email to the user
+            email_body = f"""
+Hello {target_user.get('first_name', 'User')},
+
+Your request to become a {upgrade_req.get('requested_role')} has been REJECTED.
+
+Reason: {body.get('reason', 'No reason provided')}
+
+If you have any questions, please contact support.
+
+Regards,
+Xtopus Team
+"""
+            template_params = {
+                'seller_email': target_user.get("email"),
+                'to_name': target_user.get('first_name', 'User'),
+                'name': 'Xtopus Property Management',
+                'email': 'geocorpsys@gmail.com',
+                'message': email_body,
+                'subject': "Xtopus - Role Upgrade Rejected",
+                'product_name': "Role Upgrade"
+            }
+            send_emailjs_notification(
+                target_user.get("email"),
+                "Xtopus - Role Upgrade Rejected",
+                email_body,
+                template_params
+            )
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Invalid action. Use 'approve' or 'reject'"}
+            )
+        
+        # Update the user in the database
+        data = db.get_data()
+        data["users"][target_index] = target_user
+        success = db.update_data(data)
+        
+        if success:
+            return JSONResponse({
+                "success": True,
+                "message": message,
+                "user_id": user_id,
+                "new_role": target_user.get("user_category") if action == "approve" else upgrade_req.get("requested_role")
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to process request"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error processing role upgrade: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# GET USER PAYMENT STATUS (For dashboard display)
+# ============================================
+@router.get("/get_user_payment_status")
+async def get_user_payment_status(request: Request):
+    """Get the current user's payment status and plan information"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        payment_status = current_user.get("payment_status", "free")
+        
+        # Count usage
+        user_id = current_user.get("user_id")
+        buildings = db.get_collection("buildings")
+        buildings_count = len([b for b in buildings if b.get("created_by") == user_id])
+        
+        properties = db.get_collection("properties")
+        properties_count = len([p for p in properties if p.get("created_by") == user_id])
+        
+        users = db.get_collection("users")
+        tenants_count = len([u for u in users if u.get("tenant_assigned_by") == user_id and u.get("user_category") == "Tenant"])
+        
+        # Determine if user is on free plan and has reached limits
+        is_free = payment_status == "free"
+        can_create_building = not (is_free and buildings_count >= 1)
+        can_create_property = not (is_free and properties_count >= 1)
+        can_assign_tenant = not (is_free and tenants_count >= 1)
+        
+        return JSONResponse({
+            "success": True,
+            "payment_status": payment_status,
+            "usage": {
+                "buildings": buildings_count,
+                "properties": properties_count,
+                "tenants": tenants_count,
+                "max_buildings": 1 if is_free else 999,
+                "max_properties": 1 if is_free else 999,
+                "max_tenants": 1 if is_free else 999
+            },
+            "permissions": {
+                "can_create_building": can_create_building,
+                "can_create_property": can_create_property,
+                "can_assign_tenant": can_assign_tenant
+            },
+            "is_free": is_free,
+            "message": "You are on the Free Plan. You can create 1 building, 1 property, and assign 1 tenant." if is_free else "You are on a Paid Plan with unlimited access."
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user payment status: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    
+    
+# ============================================
+# UPGRADE USER PLAN
+# ============================================
+@router.post("/upgrade_user_plan")
+async def upgrade_user_plan(request: Request):
+    """Upgrade a user from free to paid plan"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        body = await request.json()
+        payment_reference = body.get("payment_reference")
+        amount = body.get("amount")
+        
+        if not payment_reference:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Payment reference is required"}
+            )
+        
+        # Update user's payment status
+        users = db.get_collection("users")
+        target_user = None
+        for u in users:
+            if u.get("user_id") == current_user.get("user_id"):
+                target_user = u
+                break
+        
+        if not target_user:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "User not found"}
+            )
+        
+        target_user["payment_status"] = "paid"
+        target_user["upgraded_at"] = datetime.now().isoformat()
+        target_user["payment_reference"] = payment_reference
+        target_user["upgrade_amount"] = amount or 10000
+        
+        success = db.update_collection_item("users", target_user.get("_id"), target_user)
+        
+        if success:
+            create_notification(
+                current_user.get("user_id"),
+                "plan_upgraded",
+                f"🎉 Your plan has been upgraded to PAID! You now have unlimited access."
+            )
+            
+            return JSONResponse({
+                "success": True,
+                "message": "Plan upgraded successfully! You now have unlimited access."
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to upgrade plan"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error upgrading plan: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    

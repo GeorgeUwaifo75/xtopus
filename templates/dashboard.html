@@ -222,6 +222,55 @@
 
     <h1>Dashboard</h1>
     <p>Welcome, <strong>{{ user.first_name }} {{ user.last_name }}</strong>!</p>
+
+<!-- Payment Status and Usage -->
+<div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
+    <h3>💳 Your Plan</h3>
+    <div id="paymentStatusContainer">
+        <div style="color:#8B5CF6;">⏳ Loading plan information...</div>
+    </div>
+</div>
+
+<!-- Role Upgrade Request (for regular users) -->
+{% if user.user_category == "User" %}
+<div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
+    <h3>⬆️ Request Role Upgrade</h3>
+    <p>Request to be upgraded to a higher role with more permissions.</p>
+    
+    <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+        <div style="flex:1; min-width:200px;">
+            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Select Role</label>
+            <select id="upgradeRole" class="form-control">
+                <option value="Administrator">Administrator</option>
+                <option value="Sub-Administrator">Sub-Administrator</option>
+                <option value="Agent">Agent</option>
+                <option value="Tenant">Tenant</option>
+            </select>
+        </div>
+        <div style="flex:2; min-width:200px;">
+            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Reason for Request</label>
+            <textarea id="upgradeReason" class="form-control" placeholder="Why do you want to be upgraded?" rows="2"></textarea>
+        </div>
+    </div>
+    <button onclick="requestRoleUpgrade()" class="btn btn-primary" style="margin-top:0.5rem;">Submit Upgrade Request</button>
+    <div id="upgradeResult" style="margin-top:1rem;"></div>
+</div>
+{% endif %}
+
+<!-- Pending Role Upgrade Requests (for Admins) -->
+{% if user.user_category in ["Super Administrator", "Administrator"] %}
+<div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
+    <h3>📋 Pending Role Upgrade Requests</h3>
+    <p>Review and approve or reject role upgrade requests from regular users.</p>
+    
+    <div id="roleUpgradeRequestsContainer">
+        <div style="color:#8B5CF6;">⏳ Loading requests...</div>
+    </div>
+    <div id="roleUpgradeActionResult" style="margin-top:1rem;"></div>
+</div>
+{% endif %}
+
+
     <p style="color:#8B5CF6;">Managing properties can be refreshing and relaxing again.</p>
     
     {% if is_pending_tenant %}
@@ -1736,6 +1785,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load pending confirmations for admin
     loadPendingConfirmations();
     
+    // Load payment status and usage
+    loadPaymentStatus();
+    
+    // Load role upgrade requests for admins
+    loadRoleUpgradeRequests();
+    
     // Load users and properties for dropdowns - only if can_assign_tenant is true
     {% if can_assign_tenant %}
     console.log('Loading users and properties for tenant assignment...');
@@ -1785,6 +1840,343 @@ async function loadPropertyChats(propertyId) {
         console.error('Error loading chat messages:', error);
     }
 }
+
+
+// ============================================
+// LOAD PAYMENT STATUS AND USAGE
+// ============================================
+async function loadPaymentStatus() {
+    const container = document.getElementById('paymentStatusContainer');
+    if (!container) return;
+    
+    try {
+        const response = await fetch('/api/admin/get_user_payment_status');
+        const data = await response.json();
+        
+        if (data.success) {
+            const isFree = data.is_free;
+            const usage = data.usage;
+            const permissions = data.permissions;
+            
+            let html = `
+                <div style="border:1px solid ${isFree ? '#F59E0B' : '#10B981'}; padding:1rem; border-radius:8px; background:${isFree ? '#FFFBEB' : '#F0FDF4'};">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+                        <div>
+                            <span style="font-weight:bold; font-size:1.1rem; color:${isFree ? '#92400E' : '#065F46'};">
+                                ${isFree ? '🆓 Free Plan' : '💎 Paid Plan'}
+                            </span>
+                            <p style="margin-top:0.25rem; color:#666; font-size:0.9rem;">
+                                ${data.message}
+                            </p>
+                        </div>
+                        ${isFree ? `
+                            <button onclick="showUpgradePrompt()" class="btn btn-primary" style="background:#8B5CF6;">
+                                ⬆️ Upgrade Plan
+                            </button>
+                        ` : ''}
+                    </div>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:0.5rem; margin-top:1rem; padding-top:0.5rem; border-top:1px solid ${isFree ? '#FDE68A' : '#A7F3D0'};">
+                        <div>
+                            <div style="font-size:0.8rem; color:#666;">Buildings</div>
+                            <div style="font-weight:bold; color:${usage.buildings >= usage.max_buildings ? '#EF4444' : '#10B981'};">
+                                ${usage.buildings} / ${usage.max_buildings}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.8rem; color:#666;">Properties</div>
+                            <div style="font-weight:bold; color:${usage.properties >= usage.max_properties ? '#EF4444' : '#10B981'};">
+                                ${usage.properties} / ${usage.max_properties}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.8rem; color:#666;">Tenants</div>
+                            <div style="font-weight:bold; color:${usage.tenants >= usage.max_tenants ? '#EF4444' : '#10B981'};">
+                                ${usage.tenants} / ${usage.max_tenants}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.8rem; color:#666;">Status</div>
+                            <div style="font-weight:bold; color:${isFree ? '#F59E0B' : '#10B981'};">
+                                ${isFree ? '⚠️ Limited' : '✅ Unlimited'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+    } catch (error) {
+        console.error('Error loading payment status:', error);
+        container.innerHTML = '<p style="color:#EF4444;">Error loading plan information</p>';
+    }
+}
+
+// ============================================
+// SHOW UPGRADE PROMPT
+// ============================================
+function showUpgradePrompt() {
+    const container = document.getElementById('paymentStatusContainer');
+    if (!container) return;
+    
+    container.innerHTML += `
+        <div style="margin-top:1rem; padding:1rem; border:2px solid #8B5CF6; border-radius:8px; background:#f5f3ff;">
+            <h4 style="color:#8B5CF6;">⬆️ Upgrade Your Plan</h4>
+            <p>Upgrade to a Paid Plan to enjoy unlimited access:</p>
+            <ul style="margin:0.5rem 0 0.5rem 1.5rem;">
+                <li>Unlimited buildings</li>
+                <li>Unlimited properties</li>
+                <li>Unlimited tenant assignments</li>
+                <li>Priority support</li>
+            </ul>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button onclick="simulateUpgrade()" class="btn btn-primary" style="background:#10B981;">
+                    💳 Upgrade Now (₦10,000/year)
+                </button>
+                <button onclick="document.querySelector('#paymentStatusContainer .upgrade-prompt').remove()" class="btn btn-secondary">
+                    Cancel
+                </button>
+            </div>
+            <div id="upgradeResult" style="margin-top:0.5rem;"></div>
+        </div>
+    `;
+}
+
+// ============================================
+// SIMULATE UPGRADE
+// ============================================
+async function simulateUpgrade() {
+    const resultDiv = document.getElementById('upgradeResult');
+    if (!resultDiv) return;
+    
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Processing upgrade...</div>';
+    
+    try {
+        const response = await fetch('/api/admin/upgrade_user_plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                payment_reference: 'UPGRADE-' + Date.now(),
+                amount: 10000
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${data.message}</div>
+            `;
+            showToast('✅ Plan upgraded successfully!', 'success');
+            setTimeout(() => loadPaymentStatus(), 2000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to upgrade'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    }
+}
+
+// ============================================
+// REQUEST ROLE UPGRADE
+// ============================================
+async function requestRoleUpgrade() {
+    const role = document.getElementById('upgradeRole').value;
+    const reason = document.getElementById('upgradeReason').value;
+    const resultDiv = document.getElementById('upgradeResult');
+    const submitButton = document.querySelector('button[onclick="requestRoleUpgrade()"]');
+    
+    if (!role) {
+        alert('Please select a role to upgrade to.');
+        return;
+    }
+    
+    if (!reason || reason.length < 10) {
+        alert('Please provide a reason for your upgrade request (minimum 10 characters).');
+        return;
+    }
+    
+    if (submitButton) {
+        showButtonSpinner(submitButton);
+    }
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Submitting request...</div>';
+    
+    try {
+        const response = await fetch('/api/admin/request_role_upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                requested_role: role,
+                reason: reason
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${data.message}</div>
+                <p style="margin-top:0.5rem;">You will be notified once an administrator reviews your request.</p>
+            `;
+            document.getElementById('upgradeReason').value = '';
+            showToast('✅ Role upgrade request submitted!', 'success');
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to submit request'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        if (submitButton) {
+            hideButtonSpinner(submitButton);
+        }
+    }
+}
+
+// ============================================
+// LOAD ROLE UPGRADE REQUESTS (Admin)
+// ============================================
+async function loadRoleUpgradeRequests() {
+    const container = document.getElementById('roleUpgradeRequestsContainer');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="loading-placeholder">
+            <div class="spinner-mini"></div>
+            Loading requests...
+        </div>
+    `;
+    
+    try {
+        const response = await fetch('/api/admin/get_role_upgrade_requests');
+        const data = await response.json();
+        
+        if (data.success && data.requests && data.requests.length > 0) {
+            let html = '<div style="margin-top:0.5rem;">';
+            
+            data.requests.forEach(req => {
+                html += `
+                    <div style="border:1px solid #eee; padding:1rem; border-radius:8px; margin-bottom:0.75rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;">
+                            <div>
+                                <strong style="color:#8B5CF6;">${req.user_id}</strong>
+                                <span style="margin-left:0.75rem;">${req.first_name} ${req.last_name}</span>
+                                <br>
+                                <small style="color:#666;">
+                                    Email: ${req.email} | Requested: ${req.requested_role}
+                                </small>
+                                <br>
+                                <small style="color:#999;">
+                                    Reason: ${req.reason || 'No reason provided'}
+                                </small>
+                                <br>
+                                <small style="color:#999;">
+                                    Submitted: ${new Date(req.requested_at).toLocaleString()}
+                                </small>
+                            </div>
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                                <button onclick="processRoleUpgrade('${req.user_id}', 'approve', '${req.requested_role}')" 
+                                        class="btn btn-primary" style="background:#10B981; font-size:0.85rem;">
+                                    ✅ Approve
+                                </button>
+                                <button onclick="processRoleUpgrade('${req.user_id}', 'reject')" 
+                                        class="btn btn-primary" style="background:#EF4444; font-size:0.85rem;">
+                                    ❌ Reject
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `
+                <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                    <p style="color:#666;">No pending role upgrade requests.</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading role upgrade requests:', error);
+        container.innerHTML = `<div class="alert alert-error">❌ Error loading requests: ${error.message}</div>`;
+    }
+}
+
+// ============================================
+// PROCESS ROLE UPGRADE (Admin)
+// ============================================
+async function processRoleUpgrade(userId, action, requestedRole) {
+    if (action === 'approve') {
+        if (!confirm(`Are you sure you want to approve ${userId} to become a ${requestedRole}?`)) {
+            return;
+        }
+    } else {
+        const reason = prompt('Please provide a reason for rejecting this request:');
+        if (reason === null) return;
+        if (!reason || reason.trim() === '') {
+            alert('Please provide a reason for rejection.');
+            return;
+        }
+        // Store the reason for the API call
+        window._rejectionReason = reason;
+    }
+    
+    const resultDiv = document.getElementById('roleUpgradeActionResult');
+    const confirmButton = event?.target || document.querySelector('#roleUpgradeRequestsContainer .btn-primary');
+    
+    if (confirmButton) {
+        showButtonSpinner(confirmButton);
+    }
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Processing...</div>';
+    
+    try {
+        const body = {
+            user_id: userId,
+            action: action
+        };
+        
+        if (action === 'approve') {
+            body.requested_role = requestedRole;
+        } else {
+            body.reason = window._rejectionReason || 'No reason provided';
+        }
+        
+        const response = await fetch('/api/admin/process_role_upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${data.message}</div>
+            `;
+            showToast('✅ ' + data.message, 'success');
+            loadRoleUpgradeRequests();
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to process request'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        if (confirmButton) {
+            hideButtonSpinner(confirmButton);
+        }
+        window._rejectionReason = null;
+    }
+}
+
 </script>
 <style>
 .property-card {
