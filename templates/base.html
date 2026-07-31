@@ -424,7 +424,7 @@
                 align-items: center;
             }
             
-            /* Hide menu by default on mobile - using JavaScript to control display */
+            /* Hide menu by default on mobile - using class-based control */
             .navbar .nav-container .nav-menu {
                 display: none !important;
                 flex-direction: column !important;
@@ -442,7 +442,7 @@
                 gap: 0 !important;
             }
             
-            /* When menu is active, show it - using !important to override */
+            /* When menu is active, show it */
             .navbar .nav-container .nav-menu.active {
                 display: flex !important;
             }
@@ -694,7 +694,6 @@
                     // Also close the main mobile menu
                     const menu = document.getElementById('navMenu');
                     if (menu) {
-                        menu.style.display = 'none';
                         menu.classList.remove('active');
                         const toggle = document.querySelector('.nav-toggle');
                         if (toggle) {
@@ -733,80 +732,68 @@
         }
     });
 
-// ============================================
-// MENU TOGGLE (Hamburger) - FIXED ICON
-// ============================================
+    // ============================================
+    // MENU TOGGLE (Hamburger) - FIXED
+    // ============================================
 
-function toggleMenu(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    
-    const menu = document.getElementById('navMenu');
-    const toggle = document.querySelector('.nav-toggle');
-    
-    if (menu) {
-        // Check if menu is currently visible
-        const isVisible = menu.style.display === 'flex' || 
-                         (window.getComputedStyle(menu).display !== 'none' && 
-                          menu.classList.contains('active'));
+    function toggleMenu(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
         
-        if (isVisible) {
-            // Hide menu - show bars icon
-            menu.style.display = 'none';
-            menu.classList.remove('active');
+        const menu = document.getElementById('navMenu');
+        const toggle = document.querySelector('.nav-toggle');
+        
+        if (menu) {
+            // Simply toggle the 'active' class - let CSS handle the display
+            menu.classList.toggle('active');
+            
+            // Change hamburger icon based on active state
+            if (toggle) {
+                const icon = toggle.querySelector('i');
+                if (menu.classList.contains('active')) {
+                    icon.className = 'fas fa-times';
+                    console.log('Menu visible - showing X');
+                } else {
+                    icon.className = 'fas fa-bars';
+                    console.log('Menu hidden - showing bars');
+                }
+            }
+        }
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(event) {
+        const menu = document.getElementById('navMenu');
+        const toggle = document.querySelector('.nav-toggle');
+        const navContainer = document.querySelector('.nav-container');
+        
+        if (menu && toggle && window.innerWidth <= 768) {
+            // Check if click is outside the nav container
+            if (navContainer && !navContainer.contains(event.target)) {
+                menu.classList.remove('active');
+                const icon = toggle.querySelector('i');
+                if (icon) icon.className = 'fas fa-bars';
+                console.log('Menu closed by outside click - showing bars');
+            }
+        }
+    });
+
+    // Close menu on resize to desktop
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            const menu = document.getElementById('navMenu');
+            const toggle = document.querySelector('.nav-toggle');
+            if (menu) {
+                menu.classList.remove('active');
+            }
             if (toggle) {
                 const icon = toggle.querySelector('i');
                 if (icon) icon.className = 'fas fa-bars';
             }
-            console.log('Menu hidden - showing bars');
-        } else {
-            // Show menu - show X icon
-            menu.style.display = 'flex';
-            menu.classList.add('active');
-            if (toggle) {
-                const icon = toggle.querySelector('i');
-                if (icon) icon.className = 'fas fa-times';
-            }
-            console.log('Menu visible - showing X');
         }
-    }
-}
-
-// Close menu when clicking outside
-document.addEventListener('click', function(event) {
-    const menu = document.getElementById('navMenu');
-    const toggle = document.querySelector('.nav-toggle');
-    const navContainer = document.querySelector('.nav-container');
-    
-    if (menu && toggle && window.innerWidth <= 768) {
-        // Check if click is outside the nav container
-        if (navContainer && !navContainer.contains(event.target)) {
-            menu.style.display = 'none';
-            menu.classList.remove('active');
-            const icon = toggle.querySelector('i');
-            if (icon) icon.className = 'fas fa-bars';  // Show bars when closed
-            console.log('Menu closed by outside click - showing bars');
-        }
-    }
-});
-
-// Close menu on resize to desktop
-window.addEventListener('resize', function() {
-    if (window.innerWidth > 768) {
-        const menu = document.getElementById('navMenu');
-        const toggle = document.querySelector('.nav-toggle');
-        if (menu) {
-            menu.style.display = '';
-            menu.classList.remove('active');
-        }
-        if (toggle) {
-            const icon = toggle.querySelector('i');
-            if (icon) icon.className = 'fas fa-bars';  // Reset to bars on desktop
-        }
-    }
-});
+    });
 
     // ============================================
     // REPORT FUNCTIONS
@@ -846,7 +833,6 @@ window.addEventListener('resize', function() {
             // Close the main menu on mobile
             const mainMenu = document.getElementById('navMenu');
             if (mainMenu && window.innerWidth <= 768) {
-                mainMenu.style.display = 'none';
                 mainMenu.classList.remove('active');
                 const toggle = document.querySelector('.nav-toggle');
                 if (toggle) {
