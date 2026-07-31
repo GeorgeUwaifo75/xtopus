@@ -733,7 +733,7 @@
         }
     });
 
-    // ============================================
+// ============================================
 // MENU TOGGLE (Hamburger) - FIXED ICON
 // ============================================
 
@@ -752,62 +752,61 @@ function toggleMenu(event) {
                          (window.getComputedStyle(menu).display !== 'none' && 
                           menu.classList.contains('active'));
         
-        // Toggle using direct style manipulation
         if (isVisible) {
-            // Hide menu
+            // Hide menu - show bars icon
             menu.style.display = 'none';
             menu.classList.remove('active');
             if (toggle) {
                 const icon = toggle.querySelector('i');
-                if (icon) icon.className = 'fas fa-bars';  // Show bars when hidden
+                if (icon) icon.className = 'fas fa-bars';
             }
             console.log('Menu hidden - showing bars');
         } else {
-            // Show menu
+            // Show menu - show X icon
             menu.style.display = 'flex';
             menu.classList.add('active');
             if (toggle) {
                 const icon = toggle.querySelector('i');
-                if (icon) icon.className = 'fas fa-times';  // Show X when visible
+                if (icon) icon.className = 'fas fa-times';
             }
             console.log('Menu visible - showing X');
         }
     }
 }
+
+// Close menu when clicking outside
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('navMenu');
+    const toggle = document.querySelector('.nav-toggle');
+    const navContainer = document.querySelector('.nav-container');
     
-    // Close menu when clicking outside
-    document.addEventListener('click', function(event) {
+    if (menu && toggle && window.innerWidth <= 768) {
+        // Check if click is outside the nav container
+        if (navContainer && !navContainer.contains(event.target)) {
+            menu.style.display = 'none';
+            menu.classList.remove('active');
+            const icon = toggle.querySelector('i');
+            if (icon) icon.className = 'fas fa-bars';  // Show bars when closed
+            console.log('Menu closed by outside click - showing bars');
+        }
+    }
+});
+
+// Close menu on resize to desktop
+window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
         const menu = document.getElementById('navMenu');
         const toggle = document.querySelector('.nav-toggle');
-        const navContainer = document.querySelector('.nav-container');
-        
-        if (menu && toggle && window.innerWidth <= 768) {
-            // Check if click is outside the nav container
-            if (navContainer && !navContainer.contains(event.target)) {
-                menu.style.display = 'none';
-                menu.classList.remove('active');
-                const icon = toggle.querySelector('i');
-                if (icon) icon.className = 'fas fa-bars';
-                console.log('Menu closed by outside click');
-            }
+        if (menu) {
+            menu.style.display = '';
+            menu.classList.remove('active');
         }
-    });
-    
-    // Close menu on resize to desktop
-    window.addEventListener('resize', function() {
-        if (window.innerWidth > 768) {
-            const menu = document.getElementById('navMenu');
-            const toggle = document.querySelector('.nav-toggle');
-            if (menu) {
-                menu.style.display = '';
-                menu.classList.remove('active');
-            }
-            if (toggle) {
-                const icon = toggle.querySelector('i');
-                if (icon) icon.className = 'fas fa-bars';
-            }
+        if (toggle) {
+            const icon = toggle.querySelector('i');
+            if (icon) icon.className = 'fas fa-bars';  // Reset to bars on desktop
         }
-    });
+    }
+});
 
     // ============================================
     // REPORT FUNCTIONS
