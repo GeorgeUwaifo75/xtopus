@@ -733,46 +733,47 @@
         }
     });
 
-     // ============================================
-    // MENU TOGGLE (Hamburger) - DIRECT DISPLAY TOGGLE
     // ============================================
+// MENU TOGGLE (Hamburger) - FIXED ICON
+// ============================================
+
+function toggleMenu(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
     
-    function toggleMenu(event) {
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
+    const menu = document.getElementById('navMenu');
+    const toggle = document.querySelector('.nav-toggle');
+    
+    if (menu) {
+        // Check if menu is currently visible
+        const isVisible = menu.style.display === 'flex' || 
+                         (window.getComputedStyle(menu).display !== 'none' && 
+                          menu.classList.contains('active'));
         
-        const menu = document.getElementById('navMenu');
-        const toggle = document.querySelector('.nav-toggle');
-        
-        if (menu) {
-            // Check current display state
-            const isVisible = menu.style.display === 'flex' || 
-                             (window.getComputedStyle(menu).display !== 'none');
-            
-            // Toggle using direct style manipulation
-            if (isVisible) {
-                menu.style.display = 'none';
-                menu.classList.remove('active');
-            } else {
-                menu.style.display = 'flex';
-                menu.classList.add('active');
-            }
-            
-            // Change hamburger icon
+        // Toggle using direct style manipulation
+        if (isVisible) {
+            // Hide menu
+            menu.style.display = 'none';
+            menu.classList.remove('active');
             if (toggle) {
                 const icon = toggle.querySelector('i');
-                if (menu.style.display === 'flex') {
-                    icon.className = 'fas fa-times';
-                    console.log('Menu is now visible');
-                } else {
-                    icon.className = 'fas fa-bars';
-                    console.log('Menu is now hidden');
-                }
+                if (icon) icon.className = 'fas fa-bars';  // Show bars when hidden
             }
+            console.log('Menu hidden - showing bars');
+        } else {
+            // Show menu
+            menu.style.display = 'flex';
+            menu.classList.add('active');
+            if (toggle) {
+                const icon = toggle.querySelector('i');
+                if (icon) icon.className = 'fas fa-times';  // Show X when visible
+            }
+            console.log('Menu visible - showing X');
         }
     }
+}
     
     // Close menu when clicking outside
     document.addEventListener('click', function(event) {
