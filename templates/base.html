@@ -733,8 +733,8 @@
         }
     });
 
-    // ============================================
-    // MENU TOGGLE (Hamburger) - FIXED
+     // ============================================
+    // MENU TOGGLE (Hamburger) - DIRECT DISPLAY TOGGLE
     // ============================================
     
     function toggleMenu(event) {
@@ -747,27 +747,29 @@
         const toggle = document.querySelector('.nav-toggle');
         
         if (menu) {
-            // Check if menu is currently visible
-            const isVisible = menu.classList.contains('active');
+            // Check current display state
+            const isVisible = menu.style.display === 'flex' || 
+                             (window.getComputedStyle(menu).display !== 'none');
             
+            // Toggle using direct style manipulation
             if (isVisible) {
-                // Hide menu
                 menu.style.display = 'none';
                 menu.classList.remove('active');
-                if (toggle) {
-                    const icon = toggle.querySelector('i');
-                    if (icon) icon.className = 'fas fa-bars';
-                }
-                console.log('Menu hidden');
             } else {
-                // Show menu
                 menu.style.display = 'flex';
                 menu.classList.add('active');
-                if (toggle) {
-                    const icon = toggle.querySelector('i');
-                    if (icon) icon.className = 'fas fa-times';
+            }
+            
+            // Change hamburger icon
+            if (toggle) {
+                const icon = toggle.querySelector('i');
+                if (menu.style.display === 'flex') {
+                    icon.className = 'fas fa-times';
+                    console.log('Menu is now visible');
+                } else {
+                    icon.className = 'fas fa-bars';
+                    console.log('Menu is now hidden');
                 }
-                console.log('Menu visible');
             }
         }
     }
