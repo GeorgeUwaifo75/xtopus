@@ -3851,3 +3851,122 @@ async def upgrade_user_plan(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )    
+
+# Add these endpoints to admin.py
+
+# ============================================
+# BACKUP DATABASE (Super Admin only)
+# ============================================
+@router.get("/backup_database")
+async def backup_database(request: Request):
+    """Backup the entire database - Super Admin only"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        # Only Super Admin can backup
+        if current_user.get("user_category") != "Super Administrator":
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied. Only Super Administrators can backup the database."}
+            )
+        
+        # Get all data
+        data = db.get_data()
+        
+        # Add backup metadata
+        backup_data = {
+            "backup_info": {
+                "created_at": datetime.now().isoformat(),
+                "created_by": current_user.get("user_id"),
+                "version": "1.0.0",
+                "total_users": len(data.get("users", [])),
+                "total_buildings": len(data.get("buildings", [])),
+                "total_properties": len(data.get("properties", [])),
+                "total_payments": len(data.get("payments", []))
+            },
+            "data": data
+        }
+        
+        return JSONResponse({
+            "success": True,
+            "message": "Database backup created successfully",
+            "data": backup_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error backing up database: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# RESTORE DATABASE (Super Admin only)
+# ============================================
+@router.post("/restore_database")
+async def restore_database(request: Request):
+    """Restore the entire database from backup - Super Admin only"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        # Only Super Admin can restore
+        if current_user.get("user_category") != "Super Administrator":
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied. Only Super Administrators can restore the database."}
+            )
+        
+        body = await request.json()
+        
+        # Validate backup data structure
+        if "data" not in body or "backup_info" not in body:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Invalid backup file format"}
+            )
+        
+        backup_data = body.get("data", {})
+        
+        # Validate that backup contains required collections
+        required_collections = ["users", "buildings", "properties"]
+        for collection in required_collections:
+            if collection not in backup_data:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "detail": f"Missing required collection: {collection}"}
+                )
+        
+        # Restore the data
+        success = db.update_data(backup_data)
+        
+        if success:
+            # Log the restore
+            logger.info(f"Database restored by {current_user.get('user_id')} at {datetime.now().isoformat()}")
+            
+            return JSONResponse({
+                "success": True,
+                "message": "Database restored successfully"
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to restore database"}
+            )
+        
+    except Exception as e:
+        logger.error(f"Error restoring database: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    
