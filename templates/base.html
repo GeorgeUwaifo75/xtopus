@@ -408,7 +408,7 @@
             }
         }
         
-        /* Mobile styles - using high specificity */
+        /* Mobile styles */
         @media (max-width: 768px) {
             /* Show hamburger on mobile */
             .navbar .nav-container .nav-toggle {
@@ -424,7 +424,7 @@
                 align-items: center;
             }
             
-            /* Hide menu by default on mobile - using high specificity */
+            /* Hide menu by default on mobile - using JavaScript to control display */
             .navbar .nav-container .nav-menu {
                 display: none !important;
                 flex-direction: column !important;
@@ -442,7 +442,7 @@
                 gap: 0 !important;
             }
             
-            /* When menu is active, show it */
+            /* When menu is active, show it - using !important to override */
             .navbar .nav-container .nav-menu.active {
                 display: flex !important;
             }
@@ -691,6 +691,17 @@
                 item.addEventListener('click', function() {
                     dropdown.classList.remove('show');
                     if (chevron) chevron.classList.remove('open');
+                    // Also close the main mobile menu
+                    const menu = document.getElementById('navMenu');
+                    if (menu) {
+                        menu.style.display = 'none';
+                        menu.classList.remove('active');
+                        const toggle = document.querySelector('.nav-toggle');
+                        if (toggle) {
+                            const icon = toggle.querySelector('i');
+                            if (icon) icon.className = 'fas fa-bars';
+                        }
+                    }
                 });
             });
         }
@@ -736,22 +747,27 @@
         const toggle = document.querySelector('.nav-toggle');
         
         if (menu) {
-            // Toggle the active class
-            menu.classList.toggle('active');
+            // Check if menu is currently visible
+            const isVisible = menu.classList.contains('active');
             
-            // Debug: log the state
-            console.log('Menu toggled. Active:', menu.classList.contains('active'));
-            
-            // Change hamburger icon
-            if (toggle) {
-                const icon = toggle.querySelector('i');
-                if (menu.classList.contains('active')) {
-                    icon.className = 'fas fa-times';
-                    console.log('Menu is now visible');
-                } else {
-                    icon.className = 'fas fa-bars';
-                    console.log('Menu is now hidden');
+            if (isVisible) {
+                // Hide menu
+                menu.style.display = 'none';
+                menu.classList.remove('active');
+                if (toggle) {
+                    const icon = toggle.querySelector('i');
+                    if (icon) icon.className = 'fas fa-bars';
                 }
+                console.log('Menu hidden');
+            } else {
+                // Show menu
+                menu.style.display = 'flex';
+                menu.classList.add('active');
+                if (toggle) {
+                    const icon = toggle.querySelector('i');
+                    if (icon) icon.className = 'fas fa-times';
+                }
+                console.log('Menu visible');
             }
         }
     }
@@ -765,6 +781,7 @@
         if (menu && toggle && window.innerWidth <= 768) {
             // Check if click is outside the nav container
             if (navContainer && !navContainer.contains(event.target)) {
+                menu.style.display = 'none';
                 menu.classList.remove('active');
                 const icon = toggle.querySelector('i');
                 if (icon) icon.className = 'fas fa-bars';
@@ -779,6 +796,7 @@
             const menu = document.getElementById('navMenu');
             const toggle = document.querySelector('.nav-toggle');
             if (menu) {
+                menu.style.display = '';
                 menu.classList.remove('active');
             }
             if (toggle) {
@@ -826,6 +844,7 @@
             // Close the main menu on mobile
             const mainMenu = document.getElementById('navMenu');
             if (mainMenu && window.innerWidth <= 768) {
+                mainMenu.style.display = 'none';
                 mainMenu.classList.remove('active');
                 const toggle = document.querySelector('.nav-toggle');
                 if (toggle) {
