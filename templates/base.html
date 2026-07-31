@@ -349,19 +349,45 @@
         /* ============================================ */
         /* MOBILE MENU - Hamburger Dropdown Styles */
         /* ============================================ */
+        
+        /* Hide nav-toggle on desktop */
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--dark-gray);
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+        
+        .nav-toggle:hover {
+            color: var(--primary-purple);
+        }
+        
         @media (max-width: 768px) {
+            /* Show hamburger on mobile */
+            .nav-toggle {
+                display: block;
+            }
+            
             /* Make dropdowns work better on mobile */
             .nav-menu {
-                display: none;
+                display: none !important;
                 flex-direction: column;
                 width: 100%;
                 padding: 0.5rem 0;
                 background: white;
                 border-top: 1px solid #f0f0f0;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             }
             
+            /* When menu is active, show it */
             .nav-menu.active {
-                display: flex;
+                display: flex !important;
             }
             
             .nav-menu li {
@@ -434,26 +460,16 @@
                 width: auto;
             }
             
-            /* Menu toggle button */
-            .nav-toggle {
-                display: block;
-                background: none;
-                border: none;
-                font-size: 1.5rem;
-                color: var(--dark-gray);
-                cursor: pointer;
-                padding: 0.5rem;
-            }
-            
-            .nav-toggle:hover {
-                color: var(--primary-purple);
+            /* Fix nav container for mobile */
+            .nav-container {
+                position: relative;
             }
         }
 
         /* Tablet and larger screens */
         @media (min-width: 769px) {
             .nav-toggle {
-                display: none;
+                display: none !important;
             }
             
             .nav-menu {
@@ -461,6 +477,11 @@
                 flex-direction: row;
                 align-items: center;
                 gap: 0.5rem;
+                position: static;
+                box-shadow: none;
+                border-top: none;
+                padding: 0;
+                background: transparent;
             }
         }
     </style>
@@ -485,7 +506,7 @@
                 </a>
             </div>
             
-            <button class="nav-toggle" aria-label="Toggle navigation" onclick="toggleMenu()">
+            <button class="nav-toggle" aria-label="Toggle navigation" onclick="toggleMenu(event)">
                 <i class="fas fa-bars"></i>
             </button>
             
@@ -622,7 +643,6 @@
         });
         
         // Toggle this dropdown
-        const isOpen = dropdown.classList.contains('show');
         dropdown.classList.toggle('show');
         
         // Toggle chevron rotation
@@ -669,14 +689,20 @@
     });
 
     // ============================================
-    // MENU TOGGLE (Hamburger)
+    // MENU TOGGLE (Hamburger) - FIXED
     // ============================================
     
-    function toggleMenu() {
+    function toggleMenu(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
         const menu = document.getElementById('navMenu');
         const toggle = document.querySelector('.nav-toggle');
         
         if (menu) {
+            // Toggle the active class
             menu.classList.toggle('active');
             
             // Change hamburger icon
@@ -695,8 +721,11 @@
     document.addEventListener('click', function(event) {
         const menu = document.getElementById('navMenu');
         const toggle = document.querySelector('.nav-toggle');
+        const navContainer = document.querySelector('.nav-container');
+        
         if (menu && toggle && window.innerWidth <= 768) {
-            if (!menu.contains(event.target) && !toggle.contains(event.target)) {
+            // Check if click is outside the nav container
+            if (navContainer && !navContainer.contains(event.target)) {
                 menu.classList.remove('active');
                 const icon = toggle.querySelector('i');
                 if (icon) icon.className = 'fas fa-bars';
@@ -753,6 +782,17 @@
                     if (chevron) chevron.classList.remove('open');
                 }
             });
+            
+            // Close the main menu on mobile
+            const mainMenu = document.getElementById('navMenu');
+            if (mainMenu && window.innerWidth <= 768) {
+                mainMenu.classList.remove('active');
+                const toggle = document.querySelector('.nav-toggle');
+                if (toggle) {
+                    const icon = toggle.querySelector('i');
+                    if (icon) icon.className = 'fas fa-bars';
+                }
+            }
         }, 1500);
     }
 
