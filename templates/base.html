@@ -268,7 +268,9 @@
             position: relative;
         }
 
-        /* Dropdown Menu Styles */
+        /* ============================================ */
+        /* DROPDOWN MENU STYLES - Mobile Friendly */
+        /* ============================================ */
         .dropdown {
             position: relative;
             display: inline-block;
@@ -276,6 +278,19 @@
         
         .dropdown-toggle {
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .dropdown-toggle .chevron {
+            font-size: 0.6rem;
+            transition: transform 0.3s ease;
+            margin-left: 4px;
+        }
+        
+        .dropdown-toggle .chevron.open {
+            transform: rotate(180deg);
         }
         
         .dropdown-menu {
@@ -331,27 +346,84 @@
             margin: 0.25rem 0;
         }
 
-        /* Mobile responsive for dropdowns */
+        /* ============================================ */
+        /* MOBILE MENU - Hamburger Dropdown Styles */
+        /* ============================================ */
         @media (max-width: 768px) {
+            /* Make dropdowns work better on mobile */
+            .nav-menu {
+                display: none;
+                flex-direction: column;
+                width: 100%;
+                padding: 0.5rem 0;
+                background: white;
+                border-top: 1px solid #f0f0f0;
+            }
+            
+            .nav-menu.active {
+                display: flex;
+            }
+            
+            .nav-menu li {
+                width: 100%;
+                list-style: none;
+            }
+            
+            .nav-menu .nav-link {
+                padding: 0.75rem 1rem;
+                width: 100%;
+                justify-content: flex-start;
+                border-radius: 0;
+                border-bottom: 1px solid #f5f5f5;
+            }
+            
+            .nav-menu .nav-link:hover {
+                background: #f8f9fa;
+            }
+            
+            /* Mobile dropdown styles */
+            .dropdown {
+                width: 100%;
+            }
+            
+            .dropdown .dropdown-toggle {
+                width: 100%;
+                justify-content: flex-start;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid #f5f5f5;
+                border-radius: 0;
+            }
+            
+            .dropdown .dropdown-toggle .chevron {
+                margin-left: auto;
+                margin-right: 0.5rem;
+            }
+            
             .dropdown-menu {
                 position: static;
                 box-shadow: none;
                 border: none;
-                padding-left: 1rem;
+                border-radius: 0;
+                padding-left: 1.5rem;
                 background: transparent;
+                width: 100%;
             }
             
             .dropdown-menu .dropdown-item {
-                padding: 0.5rem 1rem;
+                padding: 0.6rem 1.2rem;
                 font-size: 0.9rem;
+                border-bottom: 1px solid #f5f5f5;
+            }
+            
+            .dropdown-menu .dropdown-item:last-child {
+                border-bottom: none;
             }
             
             .dropdown-menu.show {
                 display: block;
             }
-        }
-
-        @media (max-width: 768px) {
+            
+            /* Notification dropdown on mobile */
             .notification-dropdown {
                 position: fixed;
                 top: 60px;
@@ -360,6 +432,35 @@
                 min-width: unset;
                 max-width: unset;
                 width: auto;
+            }
+            
+            /* Menu toggle button */
+            .nav-toggle {
+                display: block;
+                background: none;
+                border: none;
+                font-size: 1.5rem;
+                color: var(--dark-gray);
+                cursor: pointer;
+                padding: 0.5rem;
+            }
+            
+            .nav-toggle:hover {
+                color: var(--primary-purple);
+            }
+        }
+
+        /* Tablet and larger screens */
+        @media (min-width: 769px) {
+            .nav-toggle {
+                display: none;
+            }
+            
+            .nav-menu {
+                display: flex !important;
+                flex-direction: row;
+                align-items: center;
+                gap: 0.5rem;
             }
         }
     </style>
@@ -397,7 +498,8 @@
                 <!-- COY INFO Dropdown -->
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'coyInfoDropdown')">
-                        <i class="fas fa-building"></i> Coy Info <i class="fas fa-chevron-down" style="font-size:0.6rem; margin-left:4px;"></i>
+                        <i class="fas fa-building"></i> Coy Info 
+                        <i class="fas fa-chevron-down chevron" id="coyInfoChevron"></i>
                     </a>
                     <div class="dropdown-menu" id="coyInfoDropdown">
                         <a href="#" class="dropdown-item" onclick="showHelp()"><i class="fas fa-question-circle"></i> Help</a>
@@ -410,7 +512,8 @@
                 {% if user.user_category in ["Super Administrator", "Administrator"] %}
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'reportsDropdown')">
-                        <i class="fas fa-chart-bar"></i> Reports <i class="fas fa-chevron-down" style="font-size:0.6rem; margin-left:4px;"></i>
+                        <i class="fas fa-chart-bar"></i> Reports 
+                        <i class="fas fa-chevron-down chevron" id="reportsChevron"></i>
                     </a>
                     <div class="dropdown-menu" id="reportsDropdown">
                         <a href="#" class="dropdown-item" onclick="showReport('agents')"><i class="fas fa-user-tie"></i> All Agents</a>
@@ -424,7 +527,8 @@
                 {% if user.user_category == "Super Administrator" %}
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'moreDropdown')">
-                        <i class="fas fa-ellipsis-h"></i> More <i class="fas fa-chevron-down" style="font-size:0.6rem; margin-left:4px;"></i>
+                        <i class="fas fa-ellipsis-h"></i> More 
+                        <i class="fas fa-chevron-down chevron" id="moreChevron"></i>
                     </a>
                     <div class="dropdown-menu" id="moreDropdown">
                         <a href="#" class="dropdown-item" onclick="backupDatabase()"><i class="fas fa-database"></i> Backup DB Files</a>
@@ -490,7 +594,7 @@
     {% endif %}
     <script>
     // ============================================
-    // DROPDOWN TOGGLE FUNCTIONS
+    // DROPDOWN TOGGLE FUNCTIONS (Mobile Friendly)
     // ============================================
     
     function toggleDropdown(event, dropdownId) {
@@ -500,22 +604,52 @@
         const dropdown = document.getElementById(dropdownId);
         if (!dropdown) return;
         
+        // Find the chevron icon for this dropdown
+        const toggle = event.currentTarget;
+        const chevron = toggle.querySelector('.chevron');
+        
         // Close all other dropdowns
         document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
             if (menu.id !== dropdownId) {
                 menu.classList.remove('show');
+                // Reset chevron for other dropdowns
+                const otherToggle = menu.closest('.dropdown').querySelector('.dropdown-toggle');
+                if (otherToggle) {
+                    const otherChevron = otherToggle.querySelector('.chevron');
+                    if (otherChevron) otherChevron.classList.remove('open');
+                }
             }
         });
         
         // Toggle this dropdown
+        const isOpen = dropdown.classList.contains('show');
         dropdown.classList.toggle('show');
+        
+        // Toggle chevron rotation
+        if (chevron) {
+            chevron.classList.toggle('open');
+        }
+        
+        // On mobile, close the menu when a dropdown item is clicked
+        if (window.innerWidth <= 768) {
+            const items = dropdown.querySelectorAll('.dropdown-item');
+            items.forEach(function(item) {
+                item.addEventListener('click', function() {
+                    dropdown.classList.remove('show');
+                    if (chevron) chevron.classList.remove('open');
+                });
+            });
+        }
     }
     
     // Close dropdowns when clicking outside
     document.addEventListener('click', function(event) {
         document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
-            if (!menu.contains(event.target)) {
+            const parent = menu.closest('.dropdown');
+            if (parent && !parent.contains(event.target)) {
                 menu.classList.remove('show');
+                const chevron = parent.querySelector('.chevron');
+                if (chevron) chevron.classList.remove('open');
             }
         });
     });
@@ -525,7 +659,63 @@
         if (event.key === 'Escape') {
             document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
                 menu.classList.remove('show');
+                const parent = menu.closest('.dropdown');
+                if (parent) {
+                    const chevron = parent.querySelector('.chevron');
+                    if (chevron) chevron.classList.remove('open');
+                }
             });
+        }
+    });
+
+    // ============================================
+    // MENU TOGGLE (Hamburger)
+    // ============================================
+    
+    function toggleMenu() {
+        const menu = document.getElementById('navMenu');
+        const toggle = document.querySelector('.nav-toggle');
+        
+        if (menu) {
+            menu.classList.toggle('active');
+            
+            // Change hamburger icon
+            if (toggle) {
+                const icon = toggle.querySelector('i');
+                if (menu.classList.contains('active')) {
+                    icon.className = 'fas fa-times';
+                } else {
+                    icon.className = 'fas fa-bars';
+                }
+            }
+        }
+    }
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', function(event) {
+        const menu = document.getElementById('navMenu');
+        const toggle = document.querySelector('.nav-toggle');
+        if (menu && toggle && window.innerWidth <= 768) {
+            if (!menu.contains(event.target) && !toggle.contains(event.target)) {
+                menu.classList.remove('active');
+                const icon = toggle.querySelector('i');
+                if (icon) icon.className = 'fas fa-bars';
+            }
+        }
+    });
+    
+    // Close menu on resize to desktop
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            const menu = document.getElementById('navMenu');
+            const toggle = document.querySelector('.nav-toggle');
+            if (menu) {
+                menu.classList.remove('active');
+            }
+            if (toggle) {
+                const icon = toggle.querySelector('i');
+                if (icon) icon.className = 'fas fa-bars';
+            }
         }
     });
 
@@ -554,12 +744,14 @@
             // Show toast with report info
             showToast(`${reportIcons[reportType]} ${reportNames[reportType]} would be displayed here`, 'info');
             
-            // You can redirect to a report page or open a modal
-            // window.location.href = `/reports/${reportType}`;
-            
             // Close the dropdown
             document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
                 menu.classList.remove('show');
+                const parent = menu.closest('.dropdown');
+                if (parent) {
+                    const chevron = parent.querySelector('.chevron');
+                    if (chevron) chevron.classList.remove('open');
+                }
             });
         }, 1500);
     }
@@ -605,6 +797,11 @@
         // Close dropdown
         document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
             menu.classList.remove('show');
+            const parent = menu.closest('.dropdown');
+            if (parent) {
+                const chevron = parent.querySelector('.chevron');
+                if (chevron) chevron.classList.remove('open');
+            }
         });
     }
     
@@ -664,6 +861,11 @@
         // Close dropdown
         document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
             menu.classList.remove('show');
+            const parent = menu.closest('.dropdown');
+            if (parent) {
+                const chevron = parent.querySelector('.chevron');
+                if (chevron) chevron.classList.remove('open');
+            }
         });
     }
 
@@ -874,7 +1076,7 @@
         }
     }
     
-    // Close dropdown when clicking outside
+    // Close notification dropdown when clicking outside
     document.addEventListener('click', function(event) {
         const container = document.querySelector('.notification-badge-container');
         const dropdown = document.getElementById('notificationDropdown');
@@ -950,31 +1152,16 @@
     // NAVIGATION FUNCTIONS
     // ============================================
     
-    // Menu toggle function
-    function toggleMenu() {
-        const menu = document.getElementById('navMenu');
-        if (menu) {
-            menu.classList.toggle('active');
-        }
-    }
-    
-    // Close menu when clicking outside
-    document.addEventListener('click', function(event) {
-        const menu = document.getElementById('navMenu');
-        const toggle = document.querySelector('.nav-toggle');
-        if (menu && toggle) {
-            if (!menu.contains(event.target) && !toggle.contains(event.target)) {
-                menu.classList.remove('active');
-            }
-        }
-    });
-    
-    // Navigation functions
     function showHelp() {
         alert('❓ Help Center\n\nXtopus Property Management System\n\nFor assistance, please contact:\nEmail: geocorpsys@gmail.com\nPhone: 09038197586');
         // Close any open dropdowns
         document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
             menu.classList.remove('show');
+            const parent = menu.closest('.dropdown');
+            if (parent) {
+                const chevron = parent.querySelector('.chevron');
+                if (chevron) chevron.classList.remove('open');
+            }
         });
     }
     
@@ -982,6 +1169,11 @@
         alert('🐙 About Xtopus\n\nXtopus is a holistic property rental management system designed to make managing properties refreshing and relaxing again.\n\nThe name comes from the Octopus with its 8 tentacles, symbolizing organized and coordinated connections.\n\nVersion: 1.0.0\n© 2026 Xtopus');
         document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
             menu.classList.remove('show');
+            const parent = menu.closest('.dropdown');
+            if (parent) {
+                const chevron = parent.querySelector('.chevron');
+                if (chevron) chevron.classList.remove('open');
+            }
         });
     }
     
@@ -989,6 +1181,11 @@
         alert('📧 Contact Us\n\nEmail: geocorpsys@gmail.com\nTelephone: 09038197586\n\nWe\'d love to hear from you!');
         document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
             menu.classList.remove('show');
+            const parent = menu.closest('.dropdown');
+            if (parent) {
+                const chevron = parent.querySelector('.chevron');
+                if (chevron) chevron.classList.remove('open');
+            }
         });
     }
     
