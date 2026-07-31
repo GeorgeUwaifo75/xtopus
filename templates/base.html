@@ -530,7 +530,7 @@
                 </li>
                 
                 <!-- REPORTS Dropdown (Super Admin and Admin only) -->
-                {% if user.user_category in ["Super Administrator", "Administrator"] %}
+                {% if user and user.user_category in ["Super Administrator", "Administrator"] %}
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'reportsDropdown')">
                         <i class="fas fa-chart-bar"></i> Reports 
@@ -545,7 +545,7 @@
                 {% endif %}
                 
                 <!-- MORE Dropdown (Super Admin only) -->
-                {% if user.user_category == "Super Administrator" %}
+                {% if user and user.user_category == "Super Administrator" %}
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'moreDropdown')">
                         <i class="fas fa-ellipsis-h"></i> More 

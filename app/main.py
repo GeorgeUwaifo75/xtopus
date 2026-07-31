@@ -61,6 +61,8 @@ app.include_router(properties.router, prefix="/api/properties", tags=["Propertie
 app.include_router(tenants.router, prefix="/api/tenants", tags=["Tenants"])
 
 # Page routes
+# Update the home() function in main.py
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page - Only show available properties"""
@@ -79,11 +81,25 @@ async def home(request: Request):
     # Get session token for template
     session_token = request.cookies.get("session_token")
     
+    # Get user data if logged in
+    user = None
+    if session_token:
+        from security import security
+        user_data = security.get_current_user(session_token)
+        if user_data:
+            # Get full user data from database
+            users = db.get_collection("users")
+            for u in users:
+                if u.get("user_id") == user_data.get("user_id"):
+                    user = u
+                    break
+    
     return templates.TemplateResponse("index.html", {
         "request": request,
         "properties": properties,
         "mission": "Managing properties can be refreshing and relaxing again.",
-        "session_token": session_token
+        "session_token": session_token,
+        "user": user  # <-- Add this line
     })
 
 @app.get("/login", response_class=HTMLResponse)
@@ -258,32 +274,6 @@ async def dashboard(request: Request):
             "can_assign_tenant": True
         }
     
-    # For Sub-Administrator:
-    # elif user_category == "Sub-Administrator":
-    #     permissions = user.get("permissions", {})
-    #     can_create_agents = permissions.get("can_create_agents", False)
-    #     can_create_buildings = permissions.get("can_create_buildings", False)
-    #     can_create_properties = permissions.get("can_create_properties", False)
-    #     can_manage_tenants = permissions.get("can_manage_tenants", True)
-    #     can_assign_tenant = True
-        
-    #     dashboard_template = "dashboard.html"
-    #     context = {
-    #         "request": request,
-    #         "user": user,
-    #         "properties": all_properties,
-    #         "all_properties": available_properties,  # Add this
-    #         "user_email": user.get("email"),
-    #         "session_token": token,
-    #         "notifications": user_notifications,
-    #         "can_assign_tenant": can_assign_tenant,
-    #         "permissions": {
-    #             "can_create_agents": can_create_agents,
-    #             "can_create_buildings": can_create_buildings,
-    #             "can_create_properties": can_create_properties,
-    #             "can_manage_tenants": can_manage_tenants
-    #         }
-    #     }
     else:  # Tenant or regular user
         user_id = user.get("user_id")
         tenant_properties = [p for p in all_properties if p.get("occupied_by") == user_id]
