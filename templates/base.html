@@ -347,10 +347,10 @@
         }
 
         /* ============================================ */
-        /* MOBILE MENU - Hamburger Dropdown Styles */
+        /* MOBILE MENU - FIXED */
         /* ============================================ */
         
-        /* Hide nav-toggle on desktop */
+        /* Default: Hide nav-toggle on desktop */
         .nav-toggle {
             display: none;
             background: none;
@@ -365,24 +365,34 @@
             color: var(--primary-purple);
         }
         
+        /* Mobile styles */
         @media (max-width: 768px) {
             /* Show hamburger on mobile */
             .nav-toggle {
                 display: block;
             }
             
-            /* Make dropdowns work better on mobile */
+            /* Make nav container relative for absolute positioning */
+            .nav-container {
+                position: relative;
+                flex-wrap: wrap;
+            }
+            
+            /* Hide menu by default on mobile */
             .nav-menu {
                 display: none !important;
                 flex-direction: column;
                 width: 100%;
                 padding: 0.5rem 0;
                 background: white;
-                border-top: 1px solid #f0f0f0;
+                border-top: 1px solid #e0e0e0;
                 position: absolute;
                 top: 100%;
                 left: 0;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+                z-index: 9999;
+                max-height: 80vh;
+                overflow-y: auto;
             }
             
             /* When menu is active, show it */
@@ -401,6 +411,7 @@
                 justify-content: flex-start;
                 border-radius: 0;
                 border-bottom: 1px solid #f5f5f5;
+                font-size: 0.95rem;
             }
             
             .nav-menu .nav-link:hover {
@@ -459,14 +470,9 @@
                 max-width: unset;
                 width: auto;
             }
-            
-            /* Fix nav container for mobile */
-            .nav-container {
-                position: relative;
-            }
         }
 
-        /* Tablet and larger screens */
+        /* Desktop styles */
         @media (min-width: 769px) {
             .nav-toggle {
                 display: none !important;
@@ -482,6 +488,19 @@
                 border-top: none;
                 padding: 0;
                 background: transparent;
+            }
+            
+            .nav-menu li {
+                width: auto;
+            }
+            
+            .nav-menu .nav-link {
+                border-bottom: none;
+                padding: 0.5rem 1rem;
+            }
+            
+            .dropdown-menu {
+                position: absolute;
             }
         }
     </style>
