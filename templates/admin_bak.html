@@ -26,13 +26,6 @@
     animation: spin 0.8s linear infinite;
     margin-right: 1rem;
 }
-
-/* Add to the admin.html style section */
-#propertyNamePreview {
-    transition: all 0.2s ease;
-    min-height: 40px;
-    line-height: 1.5;
-}
 </style>
 <!-- Dashboard Stats -->
 <div class="dashboard-stats" id="dashboardStats">
@@ -413,66 +406,36 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
     
-    <!-- Update the tabProperty section in admin.html -->
-
-<div id="tabProperty" class="tab-content" style="display:none;">
-    <div style="border:1px solid #eee; padding:1.5rem; border-radius:8px;">
-        <h3 style="margin-top:0;">Create Property</h3>
-        <p style="color:#666; font-size:0.9rem;">Create a new property. You can create multiple similar properties at once.</p>
-        
-        <form id="createPropertyForm" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
-            <input type="text" name="name" id="propertyName" placeholder="Property Name (e.g., Apartment)" class="form-control" required>
-            <textarea name="description" id="propertyDescription" placeholder="Description" class="form-control" required></textarea>
-            <select name="building_id" id="propertyBuilding" class="form-control" required>
-                <option value="">Select Building</option>
-                {% for building in buildings %}
-                <option value="{{ building._id or building.id }}">{{ building.name }}</option>
-                {% endfor %}
-            </select>
-            <input type="number" name="price" id="propertyPrice" placeholder="Price (₦)" class="form-control" required>
-            <select name="visibility" id="propertyVisibility" class="form-control">
-                <option value="local">Local</option>
-                <option value="public">Public</option>
-            </select>
-            
-            <!-- Batch Creation Option -->
-            <div style="border:1px solid #8B5CF6; padding:1rem; border-radius:8px; background:#f5f3ff; margin:0.5rem 0;">
-                <label style="display:block; margin-bottom:0.25rem; font-weight:600; color:#8B5CF6;">
-                    📋 Create Multiple Units
-                </label>
-                <p style="font-size:0.85rem; color:#666; margin-bottom:0.5rem;">
-                    Create multiple similar properties with sequential numbering (e.g., Unit 1, Unit 2, etc.)
-                </p>
-                <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
-                    <div style="flex:1; min-width:100px;">
-                        <label style="display:block; font-size:0.8rem; font-weight:500; margin-bottom:0.25rem;">Number of Units</label>
-                        <input type="number" id="propertyCount" name="count" value="1" min="1" max="20" class="form-control" style="width:100%;">
-                    </div>
-                    <div style="flex:1; min-width:150px;">
-                        <label style="display:block; font-size:0.8rem; font-weight:500; margin-bottom:0.25rem;">Preview</label>
-                        <div id="propertyNamePreview" style="font-size:0.9rem; color:#8B5CF6; padding:0.5rem; background:white; border-radius:4px; border:1px solid #e0e0e0;">
-                            [Property Name] - Unit 1
-                        </div>
-                    </div>
+    <div id="tabProperty" class="tab-content" style="display:none;">
+        <div style="border:1px solid #eee; padding:1.5rem; border-radius:8px;">
+            <h3 style="margin-top:0;">Create Property</h3>
+            <form id="createPropertyForm" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+                <input type="text" name="name" id="propertyName" placeholder="Property Name" class="form-control" required>
+                <textarea name="description" id="propertyDescription" placeholder="Description" class="form-control" required></textarea>
+                <select name="building_id" id="propertyBuilding" class="form-control" required>
+                    <option value="">Select Building</option>
+                    {% for building in buildings %}
+                    <option value="{{ building._id or building.id }}">{{ building.name }}</option>
+                    {% endfor %}
+                </select>
+                <input type="number" name="price" id="propertyPrice" placeholder="Price (₦)" class="form-control" required>
+                <select name="visibility" id="propertyVisibility" class="form-control">
+                    <option value="local">Local</option>
+                    <option value="public">Public</option>
+                </select>
+                
+                <div style="border:1px dashed #ccc; padding:1rem; border-radius:8px;">
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Photos (Optional - Max 4)</label>
+                    <input type="file" name="photos" id="propertyPhotos" accept="image/*" multiple class="form-control" style="padding:0.5rem;">
+                    <small style="color:#666;">Supported formats: JPEG, PNG, GIF, WEBP. Max size: 5MB each</small>
+                    <div id="propertyPhotoPreview" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem;"></div>
                 </div>
-                <small style="color:#666; font-size:0.75rem; display:block; margin-top:0.5rem;">
-                    ⚠️ Each property will be created individually with the same description, price, and photos.
-                </small>
-            </div>
-            
-            <div style="border:1px dashed #ccc; padding:1rem; border-radius:8px;">
-                <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Photos (Optional - Max 4)</label>
-                <input type="file" name="photos" id="propertyPhotos" accept="image/*" multiple class="form-control" style="padding:0.5rem;">
-                <small style="color:#666;">Supported formats: JPEG, PNG, GIF, WEBP. Max size: 5MB each</small>
-                <div id="propertyPhotoPreview" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem;"></div>
-            </div>
-            
-            <button type="submit" class="btn btn-primary">Create Property(ies)</button>
-        </form>
-        <div id="createPropertyResult" style="margin-top:0.5rem;"></div>
+                
+                <button type="submit" class="btn btn-primary">Create Property</button>
+            </form>
+            <div id="createPropertyResult" style="margin-top:0.5rem;"></div>
+        </div>
     </div>
-</div>
-
 </div>
     
  <!-- ======================================== -->
@@ -2546,7 +2509,7 @@ document.getElementById('createBuildingForm')?.addEventListener('submit', functi
 });
 
 // ============================================
-// CREATE PROPERTY - Updated with batch support
+// CREATE PROPERTY
 // ============================================
 document.getElementById('createPropertyForm')?.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -2554,44 +2517,23 @@ document.getElementById('createPropertyForm')?.addEventListener('submit', functi
     const submitButton = this.querySelector('button[type="submit"]');
     const resultDiv = document.getElementById('createPropertyResult');
     const formData = new FormData(this);
-    const count = parseInt(document.getElementById('propertyCount')?.value || 1);
     
     if (submitButton) {
         showButtonSpinner(submitButton);
     }
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Creating property...</div>';
     
-    if (count > 1) {
-        resultDiv.innerHTML = `<div style="color:#8B5CF6;">⏳ Creating ${count} properties... This may take a moment.</div>`;
-    } else {
-        resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Creating property...</div>';
-    }
-    
-    // Use the batch endpoint if count > 1
-    const endpoint = count > 1 ? '/api/admin/create_multiple_properties' : '/api/admin/create_property';
-    
-    fetch(endpoint, {
+    fetch('/api/admin/create_property', {
         method: 'POST',
         body: formData
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            if (data.count && data.count > 1) {
-                resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
-                showToast(`✅ ${data.count} properties created successfully!`, 'success');
-            } else {
-                resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
-                showToast('✅ Property created successfully!', 'success');
-            }
-            
-            // Reset form
-            document.getElementById('createPropertyForm').reset();
-            document.getElementById('propertyPhotoPreview').innerHTML = '';
-            
-            // Reload after a delay
-            setTimeout(() => location.reload(), 2000);
+            resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
+            setTimeout(() => location.reload(), 1500);
         } else {
-            resultDiv.innerHTML = `<div class="alert alert-error">❌ ${data.detail || 'Failed to create property(ies)'}</div>`;
+            resultDiv.innerHTML = `<div class="alert alert-error">❌ ${data.detail || 'Failed to create property'}</div>`;
         }
     })
     .catch(error => {
@@ -2603,29 +2545,6 @@ document.getElementById('createPropertyForm')?.addEventListener('submit', functi
         }
     });
 });
-
-// ============================================
-// PROPERTY NAME PREVIEW (for batch creation)
-// ============================================
-document.getElementById('propertyName')?.addEventListener('input', updatePropertyNamePreview);
-document.getElementById('propertyCount')?.addEventListener('input', updatePropertyNamePreview);
-
-function updatePropertyNamePreview() {
-    const name = document.getElementById('propertyName').value || '[Property Name]';
-    const count = parseInt(document.getElementById('propertyCount').value) || 1;
-    const preview = document.getElementById('propertyNamePreview');
-    
-    if (preview) {
-        if (count > 1) {
-            preview.innerHTML = `
-                ${name} - Unit 1<br>
-                <span style="color:#999; font-size:0.8rem;">... through ${name} - Unit ${count}</span>
-            `;
-        } else {
-            preview.textContent = name;
-        }
-    }
-}
 
 // ============================================
 // PHOTO PREVIEW

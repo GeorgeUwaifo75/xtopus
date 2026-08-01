@@ -3104,6 +3104,177 @@ async def create_property(
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
+
+# Add this to admin.py after the existing create_property function
+
+# ============================================
+# CREATE MULTIPLE PROPERTIES (Batch Creation)
+# ============================================
+@router.post("/create_multiple_properties")
+async def create_multiple_properties(
+    request: Request,
+    name: str = Form(None),
+    description: str = Form(None),
+    building_id: str = Form(None),
+    price: float = Form(None),
+    visibility: str = Form("local"),
+    count: int = Form(1),
+    photos: List[UploadFile] = File(None)
+):
+    """Create multiple properties with sequential numbering"""
+    try:
+        # Get current user from session
+        session_token = request.cookies.get("session_token")
+        if not session_token:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        current_user_data = security.get_current_user(session_token)
+        if not current_user_data:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Invalid session"}
+            )
+        
+        # Get full user from database
+        users = db.get_collection("users")
+        current_user = None
+        for u in users:
+            if u.get("user_id") == current_user_data.get("user_id"):
+                current_user = u
+                break
+        
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "User not found"}
+            )
+        
+        # Check if user has permission
+        user_category = current_user.get("user_category", "")
+        if user_category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Only Administrators can create properties"}
+            )
+        
+        # Validate required fields
+        if not all([name, description, building_id, price]):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "All fields are required"}
+            )
+        
+        if count < 1 or count > 20:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Number of properties must be between 1 and 20"}
+            )
+        
+        # Find the building
+        buildings = db.get_collection("buildings")
+        building = None
+        for b in buildings:
+            if b.get("_id") == building_id or b.get("id") == building_id:
+                building = b
+                break
+        
+        if not building:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Building not found"}
+            )
+        
+        # Upload photos once (reuse for all properties)
+        photo_urls = []
+        if photos:
+            validate_photos(photos)
+            for photo in photos:
+                try:
+                    url = upload_to_firebase(photo, f"properties/{datetime.now().strftime('%Y%m')}")
+                    photo_urls.append(url)
+                except Exception as e:
+                    logger.error(f"Failed to upload photo: {e}")
+        
+        # Check usage limits
+        user_id = current_user.get("user_id")
+        payment_status = current_user.get("payment_status", "free")
+        
+        # Count existing properties created by this user
+        all_properties = db.get_collection("properties")
+        existing_properties = [p for p in all_properties if p.get("created_by") == user_id]
+        
+        # Check if free user has reached limit
+        if payment_status == "free" and len(existing_properties) + count > 1:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "success": False, 
+                    "detail": f"Free plan users can only create 1 property total. You already have {len(existing_properties)}. Please upgrade your plan or reduce the number of properties."
+                }
+            )
+        
+        # Check if there are existing properties with similar names to determine starting number
+        existing_similar = [p for p in all_properties if p.get("name", "").startswith(name)]
+        base_name = name
+        created_properties = []
+        
+        for i in range(count):
+            # Generate property name with number
+            if count > 1:
+                property_name = f"{base_name} - Unit {i + 1}"
+            else:
+                property_name = base_name
+            
+            # Create property
+            property_data = {
+                "_id": f"property_{int(datetime.now().timestamp())}_{i}",
+                "id": f"property_{int(datetime.now().timestamp())}_{i}",
+                "name": property_name,
+                "description": description,
+                "building_id": building_id,
+                "building_name": building.get("name"),
+                "building_address": building.get("address"),
+                "building_state": building.get("state"),
+                "price": float(price),
+                "visibility": visibility,
+                "photos": photo_urls,
+                "available": True,
+                "created_by": current_user.get("user_id"),
+                "created_by_name": f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get("user_id"),
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+                "unit_number": i + 1,
+                "parent_name": base_name if count > 1 else None
+            }
+            
+            success = db.add_to_collection("properties", property_data)
+            if success:
+                created_properties.append(property_data)
+        
+        if created_properties:
+            return JSONResponse({
+                "success": True,
+                "message": f"Created {len(created_properties)} properties successfully with {len(photo_urls)} photos each",
+                "properties": created_properties,
+                "count": len(created_properties)
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to create properties"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error creating multiple properties: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
     
 # ============================================
 # GET NOTIFICATION COUNTS FOR HEADER BADGE (Role-Based)
