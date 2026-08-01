@@ -3972,7 +3972,7 @@ async def restore_database(request: Request):
         )    
     
 # ============================================
-# UPDATE BUILDING
+# UPDATE BUILDING - FIXED
 # ============================================
 @router.put("/update_building/{building_id}")
 async def update_building(
@@ -4006,11 +4006,11 @@ async def update_building(
         # Find the building
         buildings = db.get_collection("buildings")
         building = None
-        building_index = -1
-        for idx, b in enumerate(buildings):
+        building_id_to_update = None
+        for b in buildings:
             if b.get("_id") == building_id or b.get("id") == building_id:
                 building = b
-                building_index = idx
+                building_id_to_update = b.get("_id") or b.get("id")
                 break
         
         if not building:
@@ -4061,10 +4061,8 @@ async def update_building(
         
         building["updated_at"] = datetime.now().isoformat()
         
-        # Save to database
-        data = db.get_data()
-        data["buildings"][building_index] = building
-        success = db.update_data(data)
+        # Save to database using update_collection_item
+        success = db.update_collection_item("buildings", building_id_to_update, building)
         
         if success:
             return JSONResponse({
@@ -4080,6 +4078,8 @@ async def update_building(
             
     except Exception as e:
         logger.error(f"Error updating building: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
@@ -4087,7 +4087,7 @@ async def update_building(
 
 
 # ============================================
-# UPDATE PROPERTY
+# UPDATE PROPERTY - FIXED
 # ============================================
 @router.put("/update_property/{property_id}")
 async def update_property(
@@ -4119,11 +4119,11 @@ async def update_property(
         # Find the property
         properties = db.get_collection("properties")
         property_item = None
-        property_index = -1
-        for idx, p in enumerate(properties):
+        property_id_to_update = None
+        for p in properties:
             if p.get("_id") == property_id or p.get("id") == property_id:
                 property_item = p
-                property_index = idx
+                property_id_to_update = p.get("_id") or p.get("id")
                 break
         
         if not property_item:
@@ -4191,10 +4191,8 @@ async def update_property(
         
         property_item["updated_at"] = datetime.now().isoformat()
         
-        # Save to database
-        data = db.get_data()
-        data["properties"][property_index] = property_item
-        success = db.update_data(data)
+        # Save to database using update_collection_item
+        success = db.update_collection_item("properties", property_id_to_update, property_item)
         
         if success:
             return JSONResponse({
@@ -4210,12 +4208,13 @@ async def update_property(
             
     except Exception as e:
         logger.error(f"Error updating property: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
-
-
+    
 # ============================================
 # GET BUILDING DETAILS FOR EDIT
 # ============================================
