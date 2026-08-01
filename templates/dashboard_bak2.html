@@ -24,18 +24,18 @@
     margin-right: 1rem;
 }
 
-/* Override any grid styles for property rows */
+/* Available Properties grid: 3 per row, 4 rows per page (12 total),
+   matching the card layout used on the public index page. */
 #propertyGrid {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
     margin: 1rem 0;
 }
 
 #propertyGrid .property-row {
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -46,13 +46,13 @@
 }
 
 #propertyGrid .property-row:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
 }
 
 #propertyGrid .property-row .property-image-wrap {
-    width: 250px;
-    min-height: 200px;
+    width: 100%;
+    height: 200px;
     flex-shrink: 0;
     background: #f0f0f0;
     overflow: hidden;
@@ -61,14 +61,12 @@
 #propertyGrid .property-row .property-image-wrap img {
     width: 100%;
     height: 100%;
-    min-height: 200px;
     object-fit: cover;
 }
 
 #propertyGrid .property-row .property-details {
     flex: 1;
     padding: 1.5rem;
-    min-width: 200px;
 }
 
 #propertyGrid .property-row .property-details h3 {
@@ -149,13 +147,16 @@
     text-align: right;
 }
 
-@media (max-width: 600px) {
-    #propertyGrid .property-row {
-        flex-direction: column !important;
+/* 2 per row on tablets, 1 per row on phones */
+@media (max-width: 900px) {
+    #propertyGrid {
+        grid-template-columns: repeat(2, 1fr);
     }
-    #propertyGrid .property-row .property-image-wrap {
-        width: 100% !important;
-        min-height: 180px;
+}
+
+@media (max-width: 600px) {
+    #propertyGrid {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -614,7 +615,7 @@ function displayPropertiesPage() {
     
     if (pageProperties.length === 0) {
         grid.innerHTML = `
-            <div style="text-align:center; padding:2rem; background:white; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+            <div style="grid-column:1/-1; text-align:center; padding:2rem; background:white; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
                 <p style="color:#666;">No properties available.</p>
             </div>
         `;
