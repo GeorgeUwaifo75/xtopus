@@ -556,20 +556,30 @@
                 </li>
                 
                 <!-- REPORTS Dropdown (Super Admin and Admin only) -->
-                {% if user and user.user_category in ["Super Administrator", "Administrator"] %}
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'reportsDropdown')">
-                        <i class="fas fa-chart-bar"></i> Reports 
-                        <i class="fas fa-chevron-down chevron" id="reportsChevron"></i>
-                    </a>
-                    <div class="dropdown-menu" id="reportsDropdown">
-                        <a href="#" class="dropdown-item" onclick="showReport('agents')"><i class="fas fa-user-tie"></i> All Agents</a>
-                        <a href="#" class="dropdown-item" onclick="showReport('buildings')"><i class="fas fa-building"></i> The Buildings</a>
-                        <a href="#" class="dropdown-item" onclick="showReport('properties')"><i class="fas fa-home"></i> The Properties</a>
-                    </div>
-                </li>
-                {% endif %}
-                
+{% if user and user.user_category in ["Super Administrator", "Administrator"] %}
+<li class="dropdown">
+    <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'reportsDropdown')">
+        <i class="fas fa-chart-bar"></i> Reports 
+        <i class="fas fa-chevron-down chevron" id="reportsChevron"></i>
+    </a>
+    <div class="dropdown-menu" id="reportsDropdown">
+        <!-- EXISTING MENU ITEMS -->
+        <a href="#" class="dropdown-item" onclick="showReport('agents')"><i class="fas fa-user-tie"></i> All Agents</a>
+        <a href="#" class="dropdown-item" onclick="showReport('buildings')"><i class="fas fa-building"></i> The Buildings</a>
+        <a href="#" class="dropdown-item" onclick="showReport('properties')"><i class="fas fa-home"></i> The Properties</a>
+        
+        <div class="dropdown-divider"></div>
+        
+        <!-- NEW MENU ITEMS -->
+        <a href="#" class="dropdown-item" onclick="showReport('complaints')"><i class="fas fa-exclamation-triangle"></i> All Complaints</a>
+        <a href="#" class="dropdown-item" onclick="showReport('rents_due')"><i class="fas fa-clock"></i> All Rents Due</a>
+        <a href="#" class="dropdown-item" onclick="showReport('pending_rents')"><i class="fas fa-exclamation-circle"></i> All Pending Rents</a>
+        <a href="#" class="dropdown-item" onclick="showReport('paid_rents')"><i class="fas fa-check-circle"></i> All Paid Rents</a>
+        <a href="#" class="dropdown-item" onclick="showReport('additional_expenses')"><i class="fas fa-plus-circle"></i> All Additional Expenses</a>
+        <a href="#" class="dropdown-item" onclick="showReport('pl')"><i class="fas fa-file-invoice-dollar"></i> P & L Report</a>
+    </div>
+</li>
+{% endif %}
                 <!-- MORE Dropdown (Super Admin only) -->
                 {% if user and user.user_category == "Super Administrator" %}
                 <li class="dropdown">
@@ -788,52 +798,297 @@
     });
 
     // ============================================
-    // REPORT FUNCTIONS
-    // ============================================
+// REPORT FUNCTIONS
+// ============================================
+
+function showReport(reportType) {
+    const reportNames = {
+        // EXISTING
+        'agents': 'All Agents Report',
+        'buildings': 'Buildings Report',
+        'properties': 'Properties Report',
+        // NEW
+        'complaints': 'All Complaints Report',
+        'rents_due': 'All Rents Due Report',
+        'pending_rents': 'All Pending Rents Report',
+        'paid_rents': 'All Paid Rents Report',
+        'additional_expenses': 'All Additional Expenses Report',
+        'pl': 'Profit & Loss Report'
+    };
     
-    function showReport(reportType) {
-        const reportNames = {
-            'agents': 'All Agents Report',
-            'buildings': 'Buildings Report',
-            'properties': 'Properties Report'
-        };
-        
-        const reportIcons = {
-            'agents': '👥',
-            'buildings': '🏗️',
-            'properties': '🏠'
-        };
-        
-        showSpinner('Loading Report...', `Generating ${reportNames[reportType] || 'Report'}`);
-        
-        // Simulate loading and redirect or show report
+    const reportIcons = {
+        // EXISTING
+        'agents': '👥',
+        'buildings': '🏗️',
+        'properties': '🏠',
+        // NEW
+        'complaints': '⚠️',
+        'rents_due': '⏰',
+        'pending_rents': '❗',
+        'paid_rents': '✅',
+        'additional_expenses': '💰',
+        'pl': '📊'
+    };
+    
+    showSpinner('Loading Report...', `Generating ${reportNames[reportType] || 'Report'}`);
+    
+    // Close the dropdown first
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+        menu.classList.remove('show');
+        const parent = menu.closest('.dropdown');
+        if (parent) {
+            const chevron = parent.querySelector('.chevron');
+            if (chevron) chevron.classList.remove('open');
+        }
+    });
+    
+    // Close the main menu on mobile
+    const mainMenu = document.getElementById('navMenu');
+    if (mainMenu && window.innerWidth <= 768) {
+        mainMenu.classList.remove('mobile-open');
+        const toggle = document.querySelector('.nav-toggle');
+        if (toggle) {
+            const icon = toggle.querySelector('i');
+            if (icon) icon.className = 'fas fa-bars';
+        }
+    }
+    
+    // For existing report types, use the old behavior (toast notification)
+    const existingReports = ['agents', 'buildings', 'properties'];
+    if (existingReports.includes(reportType)) {
         setTimeout(function() {
             hideSpinner();
-            // Show toast with report info
             showToast(`${reportIcons[reportType]} ${reportNames[reportType]} would be displayed here`, 'info');
-            
-            // Close the dropdown
-            document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
-                menu.classList.remove('show');
-                const parent = menu.closest('.dropdown');
-                if (parent) {
-                    const chevron = parent.querySelector('.chevron');
-                    if (chevron) chevron.classList.remove('open');
-                }
-            });
-            
-            // Close the main menu on mobile
-            const mainMenu = document.getElementById('navMenu');
-            if (mainMenu && window.innerWidth <= 768) {
-                mainMenu.classList.remove('mobile-open');
-                const toggle = document.querySelector('.nav-toggle');
-                if (toggle) {
-                    const icon = toggle.querySelector('i');
-                    if (icon) icon.className = 'fas fa-bars';
-                }
-            }
         }, 1500);
+        return;
     }
+    
+    // For new report types, fetch and display the report
+    fetchReportData(reportType);
+}
+
+async function fetchReportData(reportType) {
+    try {
+        const response = await fetch(`/api/admin/reports/${reportType}`);
+        const data = await response.json();
+        
+        hideSpinner();
+        
+        if (data.success) {
+            // Display report in a modal
+            displayReportModal(reportType, data);
+        } else {
+            showToast('❌ Failed to load report: ' + (data.detail || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        hideSpinner();
+        showToast('❌ Error loading report: ' + error.message, 'error');
+    }
+}
+
+function displayReportModal(reportType, data) {
+    // Create or get modal container
+    let modal = document.getElementById('reportModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'reportModal';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 99999;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    const reportTitles = {
+        'complaints': 'All Complaints',
+        'rents_due': 'All Rents Due',
+        'pending_rents': 'All Pending Rents',
+        'paid_rents': 'All Paid Rents',
+        'additional_expenses': 'All Additional Expenses',
+        'pl': 'Profit & Loss Report'
+    };
+    
+    modal.innerHTML = `
+        <div style="background:white; border-radius:12px; max-width:900px; width:95%; max-height:90vh; overflow-y:auto; padding:2rem; position:relative; animation:scaleIn 0.3s ease;">
+            <button onclick="closeReportModal()" style="position:absolute; top:1rem; right:1rem; background:#EF4444; color:white; border:none; border-radius:50%; width:35px; height:35px; cursor:pointer; font-size:1.2rem;">×</button>
+            
+            <h2 style="color:#8B5CF6; margin-top:0; display:flex; align-items:center; gap:0.75rem;">
+                <span>${reportTitles[reportType] || 'Report'}</span>
+                <span style="font-size:0.8rem; color:#666; font-weight:normal; margin-left:auto;">
+                    ${new Date().toLocaleDateString()}
+                </span>
+            </h2>
+            
+            <div style="background:#f8f9fa; padding:1rem; border-radius:8px; margin:1rem 0;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:1rem;">
+                    <div><strong>Total Records:</strong> <span style="color:#8B5CF6;">${data.count || data.data?.length || 0}</span></div>
+                    ${data.summary ? `<div><strong>Summary:</strong> ${data.summary}</div>` : ''}
+                    ${data.totals ? `
+                        <div><strong>Income:</strong> <span style="color:#10B981;">₦${data.totals.income.toLocaleString()}</span></div>
+                        <div><strong>Expenses:</strong> <span style="color:#EF4444;">₦${data.totals.expenses.toLocaleString()}</span></div>
+                        <div><strong>Profit:</strong> <span style="color:${data.totals.profit >= 0 ? '#10B981' : '#EF4444'};">₦${data.totals.profit.toLocaleString()}</span></div>
+                    ` : ''}
+                </div>
+            </div>
+            
+            <div id="reportContent" style="margin-top:1rem;">
+                ${renderReportContent(reportType, data)}
+            </div>
+            
+            <div style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button onclick="closeReportModal()" class="btn btn-secondary">Close</button>
+                <button onclick="exportReport('${reportType}')" class="btn btn-primary" style="background:#10B981;">📥 Export CSV</button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+}
+
+function renderReportContent(reportType, data) {
+    const items = data.data || data.records || [];
+    
+    if (!items || items.length === 0) {
+        return `<div style="text-align:center; padding:2rem; color:#666;">No records found for this report.</div>`;
+    }
+    
+    let html = '<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:0.9rem;">';
+    
+    // Build table headers based on report type
+    let headers = [];
+    let rows = [];
+    
+    switch(reportType) {
+        case 'complaints':
+            headers = ['#', 'User', 'Subject', 'Status', 'Created'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.user_id || item.created_by || 'Unknown',
+                item.subject || item.title || 'No subject',
+                `<span style="background:${item.status === 'resolved' ? '#D1FAE5' : item.status === 'escalated' ? '#FEF3C7' : '#FEE2E2'}; color:${item.status === 'resolved' ? '#065F46' : item.status === 'escalated' ? '#92400E' : '#991B1B'}; padding:0.2rem 0.6rem; border-radius:12px; font-size:0.75rem;">${item.status || 'Open'}</span>`,
+                item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'
+            ]);
+            break;
+            
+        case 'rents_due':
+        case 'pending_rents':
+        case 'paid_rents':
+            headers = ['#', 'Tenant', 'Property', 'Amount', 'Due Date', 'Status'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.tenant_name || item.user_id || 'Unknown',
+                item.property_name || 'N/A',
+                `₦${Number(item.amount || item.rent_amount || 0).toLocaleString()}`,
+                item.due_date || item.rental_end_date || 'N/A',
+                `<span style="background:${item.status === 'paid' ? '#D1FAE5' : item.status === 'overdue' ? '#FEE2E2' : '#FEF3C7'}; color:${item.status === 'paid' ? '#065F46' : item.status === 'overdue' ? '#991B1B' : '#92400E'}; padding:0.2rem 0.6rem; border-radius:12px; font-size:0.75rem;">${item.status || 'Pending'}</span>`
+            ]);
+            break;
+            
+        case 'additional_expenses':
+            headers = ['#', 'Description', 'Category', 'Amount', 'Date', 'Status'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.description || item.name || 'N/A',
+                item.category || 'General',
+                `₦${Number(item.amount || 0).toLocaleString()}`,
+                item.date ? new Date(item.date).toLocaleDateString() : 'N/A',
+                item.status || 'Pending'
+            ]);
+            break;
+            
+        case 'pl':
+            headers = ['#', 'Category', 'Description', 'Amount', 'Type', 'Date'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.category || 'General',
+                item.description || item.name || 'N/A',
+                `₦${Number(item.amount || 0).toLocaleString()}`,
+                `<span style="color:${item.type === 'income' ? '#10B981' : '#EF4444'};">${item.type || 'Expense'}</span>`,
+                item.date ? new Date(item.date).toLocaleDateString() : 'N/A'
+            ]);
+            break;
+            
+        default:
+            headers = Object.keys(items[0] || {});
+            rows = items.map(item => headers.map(key => item[key] || 'N/A'));
+    }
+    
+    // Build table
+    html += '<thead><tr style="background:#f3f0ff;">';
+    headers.forEach(h => {
+        html += `<th style="padding:0.75rem; text-align:left; border-bottom:2px solid #8B5CF6; font-weight:600; color:#4B5563;">${h}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    rows.forEach(row => {
+        html += '<tr style="border-bottom:1px solid #f0f0f0;">';
+        row.forEach(cell => {
+            html += `<td style="padding:0.75rem; color:#4B5563;">${cell}</td>`;
+        });
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+    
+    return html;
+}
+
+function closeReportModal() {
+    const modal = document.getElementById('reportModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function exportReport(reportType) {
+    const modal = document.getElementById('reportModal');
+    if (!modal) return;
+    
+    const content = document.getElementById('reportContent');
+    if (!content) return;
+    
+    const table = content.querySelector('table');
+    if (!table) {
+        showToast('❌ No data to export', 'error');
+        return;
+    }
+    
+    // Convert table to CSV
+    let csv = '';
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('th, td');
+        const rowData = [];
+        cells.forEach(cell => {
+            let text = cell.textContent.trim();
+            // Remove extra spaces and clean up
+            text = text.replace(/\s+/g, ' ').replace(/,/g, ';');
+            rowData.push(text);
+        });
+        csv += rowData.join(',') + '\n';
+    });
+    
+    // Download CSV
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${reportType}_report_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('✅ Report exported successfully!', 'success');
+}
+
 
     // ============================================
     // DATABASE FUNCTIONS (Super Admin only)

@@ -4535,3 +4535,397 @@ async def get_property_details_for_edit(request: Request, property_id: str):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
+    
+# ============================================
+# REPORT ENDPOINTS
+# ============================================
+
+@router.get("/reports/complaints")
+async def get_complaints_report(request: Request):
+    """Get all complaints report"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        complaints = db.get_collection("complaints")
+        
+        # If Administrator, only show complaints for their properties
+        if category == "Administrator":
+            user_id = current_user.get("user_id")
+            # Get properties created by this admin
+            properties = db.get_collection("properties")
+            admin_property_ids = [p.get("_id") for p in properties if p.get("created_by") == user_id]
+            # Filter complaints for these properties
+            complaints = [c for c in complaints if c.get("property_id") in admin_property_ids]
+        
+        # Sort by created_at descending
+        complaints.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        return JSONResponse({
+            "success": True,
+            "data": complaints,
+            "count": len(complaints)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting complaints report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/rents_due")
+async def get_rents_due_report(request: Request):
+    """Get all rents due for the current month"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        today = datetime.now().date()
+        current_month = today.month
+        current_year = today.year
+        
+        users = db.get_collection("users")
+        properties = db.get_collection("properties")
+        
+        # Build property lookup
+        property_map = {}
+        for p in properties:
+            property_map[p.get("_id")] = p
+        
+        rents_due = []
+        
+        for user in users:
+            if user.get("user_category") == "Tenant" and user.get("tenant_status") == "active":
+                rental_end = user.get("rental_end_date")
+                if rental_end:
+                    try:
+                        end_date = datetime.fromisoformat(rental_end).date()
+                        # Check if rent is due this month (end date is in current month or past)
+                        if end_date.month == current_month and end_date.year == current_year:
+                            property_id = user.get("assigned_property_id")
+                            property_name = property_map.get(property_id, {}).get("name", "Unknown")
+                            rents_due.append({
+                                "tenant_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user.get("user_id"),
+                                "user_id": user.get("user_id"),
+                                "property_name": property_name,
+                                "amount": user.get("rent_amount", 0),
+                                "due_date": rental_end,
+                                "status": "due"
+                            })
+                    except:
+                        pass
+        
+        return JSONResponse({
+            "success": True,
+            "data": rents_due,
+            "count": len(rents_due),
+            "summary": f"{len(rents_due)} rent(s) due this month"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting rents due report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/pending_rents")
+async def get_pending_rents_report(request: Request):
+    """Get all overdue/pending rents"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        today = datetime.now().date()
+        
+        users = db.get_collection("users")
+        properties = db.get_collection("properties")
+        
+        # Build property lookup
+        property_map = {}
+        for p in properties:
+            property_map[p.get("_id")] = p
+        
+        pending_rents = []
+        
+        for user in users:
+            if user.get("user_category") == "Tenant" and user.get("tenant_status") == "active":
+                rental_end = user.get("rental_end_date")
+                if rental_end:
+                    try:
+                        end_date = datetime.fromisoformat(rental_end).date()
+                        # Check if rent is overdue (end date is in the past)
+                        if end_date < today:
+                            property_id = user.get("assigned_property_id")
+                            property_name = property_map.get(property_id, {}).get("name", "Unknown")
+                            days_overdue = (today - end_date).days
+                            pending_rents.append({
+                                "tenant_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user.get("user_id"),
+                                "user_id": user.get("user_id"),
+                                "property_name": property_name,
+                                "amount": user.get("rent_amount", 0),
+                                "due_date": rental_end,
+                                "days_overdue": days_overdue,
+                                "status": "overdue"
+                            })
+                    except:
+                        pass
+        
+        # Sort by days overdue (highest first)
+        pending_rents.sort(key=lambda x: x.get("days_overdue", 0), reverse=True)
+        
+        return JSONResponse({
+            "success": True,
+            "data": pending_rents,
+            "count": len(pending_rents),
+            "summary": f"{len(pending_rents)} overdue rent(s) totaling ₦{sum(r['amount'] for r in pending_rents):,}"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting pending rents report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/paid_rents")
+async def get_paid_rents_report(request: Request):
+    """Get all paid rents for the current month"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        today = datetime.now().date()
+        current_month = today.month
+        current_year = today.year
+        
+        payments = db.get_collection("payments")
+        users = db.get_collection("users")
+        properties = db.get_collection("properties")
+        
+        # Build lookups
+        user_map = {}
+        for u in users:
+            user_map[u.get("user_id")] = u
+        
+        property_map = {}
+        for p in properties:
+            property_map[p.get("_id")] = p
+        
+        paid_rents = []
+        
+        for payment in payments:
+            if payment.get("status") == "verified":
+                created_at = payment.get("created_at")
+                if created_at:
+                    try:
+                        created_date = datetime.fromisoformat(created_at).date()
+                        if created_date.month == current_month and created_date.year == current_year:
+                            user_id = payment.get("user_id")
+                            property_id = payment.get("property_id")
+                            user = user_map.get(user_id, {})
+                            property_name = property_map.get(property_id, {}).get("name", "Unknown")
+                            paid_rents.append({
+                                "tenant_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user_id,
+                                "user_id": user_id,
+                                "property_name": property_name,
+                                "amount": payment.get("amount", 0),
+                                "payment_reference": payment.get("payment_reference", "N/A"),
+                                "paid_date": created_at,
+                                "status": "paid"
+                            })
+                    except:
+                        pass
+        
+        # Sort by paid date descending
+        paid_rents.sort(key=lambda x: x.get("paid_date", ""), reverse=True)
+        
+        total_paid = sum(r['amount'] for r in paid_rents)
+        
+        return JSONResponse({
+            "success": True,
+            "data": paid_rents,
+            "count": len(paid_rents),
+            "summary": f"{len(paid_rents)} rent(s) paid this month totaling ₦{total_paid:,}"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting paid rents report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/additional_expenses")
+async def get_additional_expenses_report(request: Request):
+    """Get all additional expenses"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        # Get expenses from the data store
+        data = db.get_data()
+        expenses = data.get("expenses", [])
+        
+        # If Administrator, filter expenses they created
+        if category == "Administrator":
+            user_id = current_user.get("user_id")
+            expenses = [e for e in expenses if e.get("created_by") == user_id]
+        
+        # Sort by created_at descending
+        expenses.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        total_expenses = sum(e.get("amount", 0) for e in expenses)
+        
+        return JSONResponse({
+            "success": True,
+            "data": expenses,
+            "count": len(expenses),
+            "summary": f"{len(expenses)} expense(s) totaling ₦{total_expenses:,}"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting additional expenses report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/pl")
+async def get_profit_loss_report(request: Request):
+    """Get Profit & Loss report"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        # Get data
+        payments = db.get_collection("payments")
+        data = db.get_data()
+        expenses = data.get("expenses", [])
+        
+        # Calculate total income (verified payments)
+        total_income = sum(p.get("amount", 0) for p in payments if p.get("status") == "verified")
+        
+        # Calculate total expenses
+        total_expenses = sum(e.get("amount", 0) for e in expenses)
+        
+        # Calculate profit
+        profit = total_income - total_expenses
+        
+        # Build detailed records
+        records = []
+        
+        # Add income records
+        for p in payments:
+            if p.get("status") == "verified":
+                records.append({
+                    "category": "Rent Income",
+                    "description": f"Payment from {p.get('user_id', 'Unknown')}",
+                    "amount": p.get("amount", 0),
+                    "type": "income",
+                    "date": p.get("created_at", "")
+                })
+        
+        # Add expense records
+        for e in expenses:
+            records.append({
+                "category": e.get("category", "Expense"),
+                "description": e.get("description", e.get("name", "Unknown expense")),
+                "amount": e.get("amount", 0),
+                "type": "expense",
+                "date": e.get("created_at", "")
+            })
+        
+        # Sort by date descending
+        records.sort(key=lambda x: x.get("date", ""), reverse=True)
+        
+        return JSONResponse({
+            "success": True,
+            "data": records,
+            "count": len(records),
+            "summary": f"Total Income: ₦{total_income:,} | Total Expenses: ₦{total_expenses:,} | Profit: ₦{profit:,}",
+            "totals": {
+                "income": total_income,
+                "expenses": total_expenses,
+                "profit": profit
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting P&L report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    
