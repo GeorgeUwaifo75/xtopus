@@ -166,16 +166,6 @@ def upload_to_firebase(file: UploadFile, folder: str = "buildings") -> str:
         logger.error(f"Failed to upload to Firebase: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
-def filter_empty_uploads(photos: Optional[List[UploadFile]]) -> List[UploadFile]:
-    """Browsers submit a file <input> as an empty part (filename='') when the
-    user leaves it untouched, rather than omitting it entirely. Without this
-    filter, edit forms that only touch text fields still send a bogus 'photo'
-    that fails validation and gets misreported as a 500."""
-    if not photos:
-        return []
-    return [p for p in photos if p.filename]
-
-
 def validate_photos(photos: List[UploadFile]) -> None:
     if not photos:
         return
@@ -4006,13 +3996,8 @@ async def update_building(
                 content={"success": False, "detail": "Not authenticated"}
             )
         
-        # NOTE: renamed from `category` -> `user_category`. The route also has a
-        # `category` Form field (the building's rental category), and reusing the
-        # same name for the current user's role silently clobbered it, so saved
-        # buildings ended up with category="Administrator" instead of the actual
-        # value the form submitted.
-        user_category = current_user.get("user_category", "")
-        if user_category not in ["Super Administrator", "Administrator"]:
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
             return JSONResponse(
                 status_code=403,
                 content={"success": False, "detail": "Access denied"}
@@ -4038,7 +4023,7 @@ async def update_building(
             )
         
         # Check if user has permission to edit this building
-        if user_category == "Administrator":
+        if category == "Administrator":
             if building.get("created_by") != current_user.get("user_id"):
                 return JSONResponse(
                     status_code=403,
@@ -4061,9 +4046,7 @@ async def update_building(
         if category is not None:
             building["category"] = category
         
-        # Upload new photos if provided (filter out the empty file part that
-        # browsers submit when the file input is left untouched)
-        photos = filter_empty_uploads(photos)
+        # Upload new photos if provided
         if photos:
             validate_photos(photos)
             photo_urls = []
@@ -4098,12 +4081,7 @@ async def update_building(
                 status_code=500,
                 content={"success": False, "detail": "Failed to update building"}
             )
-    
-    except HTTPException as e:
-        # Preserve the intended status code (e.g. 400 from validate_photos)
-        # instead of masking it as a 500.
-        logger.warning(f"Update building rejected: {e.detail}")
-        return JSONResponse(status_code=e.status_code, content={"success": False, "detail": e.detail})
+            
     except Exception as e:
         logger.error(f"Error updating building: {e}")
         import traceback
@@ -4204,9 +4182,7 @@ async def update_property(
                 property_item["building_address"] = new_building.get("address")
                 property_item["building_state"] = new_building.get("state")
         
-        # Upload new photos if provided (filter out the empty file part that
-        # browsers submit when the file input is left untouched)
-        photos = filter_empty_uploads(photos)
+        # Upload new photos if provided
         if photos:
             validate_photos(photos)
             photo_urls = []
@@ -4242,11 +4218,6 @@ async def update_property(
                 content={"success": False, "detail": "Failed to update property"}
             )
             
-    except HTTPException as e:
-        # Preserve the intended status code (e.g. 400 from validate_photos)
-        # instead of masking it as a 500.
-        logger.warning(f"Update property rejected: {e.detail}")
-        return JSONResponse(status_code=e.status_code, content={"success": False, "detail": e.detail})
     except Exception as e:
         logger.error(f"Error updating property: {e}")
         import traceback
@@ -4364,3 +4335,4 @@ async def get_property_details_for_edit(request: Request, property_id: str):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
+    
