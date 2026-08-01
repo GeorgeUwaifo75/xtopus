@@ -3972,7 +3972,7 @@ async def restore_database(request: Request):
         )    
     
 # ============================================
-# UPDATE BUILDING - FIXED
+# UPDATE BUILDING - COMPLETE FIX
 # ============================================
 @router.put("/update_building/{building_id}")
 async def update_building(
@@ -4003,17 +4003,15 @@ async def update_building(
                 content={"success": False, "detail": "Access denied"}
             )
         
-        # Get all data
-        data = db.get_data()
-        buildings = data.get("buildings", [])
-        
-        # Find the building
+        # Find the building and get its _id
+        buildings = db.get_collection("buildings")
         building = None
-        building_index = -1
-        for idx, b in enumerate(buildings):
+        building_id_to_update = None
+        
+        for b in buildings:
             if b.get("_id") == building_id or b.get("id") == building_id:
                 building = b
-                building_index = idx
+                building_id_to_update = b.get("_id") or b.get("id")
                 break
         
         if not building:
@@ -4030,21 +4028,22 @@ async def update_building(
                     content={"success": False, "detail": "You can only edit buildings you created"}
                 )
         
-        # Update fields
-        if name:
-            building["name"] = name
-        if description:
-            building["description"] = description
-        if address:
-            building["address"] = address
-        if state:
-            building["state"] = state
-        if unit_type:
-            building["unit_type"] = unit_type
-        if number_of_units:
-            building["number_of_units"] = int(number_of_units)
-        if category:
-            building["category"] = category
+        # Create update data
+        update_data = {}
+        if name is not None:
+            update_data["name"] = name
+        if description is not None:
+            update_data["description"] = description
+        if address is not None:
+            update_data["address"] = address
+        if state is not None:
+            update_data["state"] = state
+        if unit_type is not None:
+            update_data["unit_type"] = unit_type
+        if number_of_units is not None:
+            update_data["number_of_units"] = int(number_of_units)
+        if category is not None:
+            update_data["category"] = category
         
         # Upload new photos if provided
         if photos:
@@ -4060,21 +4059,23 @@ async def update_building(
                 # Keep existing photos and add new ones (limit to MAX_PHOTOS)
                 existing_photos = building.get("photos", [])
                 all_photos = existing_photos + photo_urls
-                building["photos"] = all_photos[:MAX_PHOTOS]
+                update_data["photos"] = all_photos[:MAX_PHOTOS]
         
-        building["updated_at"] = datetime.now().isoformat()
+        # Always update the updated_at timestamp
+        update_data["updated_at"] = datetime.now().isoformat()
         
-        # Update the building in the list
-        data["buildings"][building_index] = building
-        
-        # Save the entire data
-        success = db.update_data(data)
+        # Save to database using update_collection_item
+        success = db.update_collection_item("buildings", building_id_to_update, update_data)
         
         if success:
+            # Get the updated building
+            updated_building = building.copy()
+            updated_building.update(update_data)
+            
             return JSONResponse({
                 "success": True,
-                "message": f"Building '{building.get('name')}' updated successfully",
-                "building": building
+                "message": f"Building '{updated_building.get('name')}' updated successfully",
+                "building": updated_building
             })
         else:
             return JSONResponse(
@@ -4093,7 +4094,7 @@ async def update_building(
 
 
 # ============================================
-# UPDATE PROPERTY - FIXED
+# UPDATE PROPERTY - COMPLETE FIX
 # ============================================
 @router.put("/update_property/{property_id}")
 async def update_property(
@@ -4122,17 +4123,15 @@ async def update_property(
                 content={"success": False, "detail": "Access denied"}
             )
         
-        # Get all data
-        data = db.get_data()
-        properties = data.get("properties", [])
-        
-        # Find the property
+        # Find the property and get its _id
+        properties = db.get_collection("properties")
         property_item = None
-        property_index = -1
-        for idx, p in enumerate(properties):
+        property_id_to_update = None
+        
+        for p in properties:
             if p.get("_id") == property_id or p.get("id") == property_id:
                 property_item = p
-                property_index = idx
+                property_id_to_update = p.get("_id") or p.get("id")
                 break
         
         if not property_item:
@@ -4156,20 +4155,21 @@ async def update_property(
                 content={"success": False, "detail": "Cannot edit an occupied property. The tenant must be removed first."}
             )
         
-        # Update fields
-        if name:
-            property_item["name"] = name
-        if description:
-            property_item["description"] = description
-        if price:
-            property_item["price"] = float(price)
-        if visibility:
-            property_item["visibility"] = visibility
+        # Create update data
+        update_data = {}
+        if name is not None:
+            update_data["name"] = name
+        if description is not None:
+            update_data["description"] = description
+        if price is not None:
+            update_data["price"] = float(price)
+        if visibility is not None:
+            update_data["visibility"] = visibility
         
         # Update building reference if changed
-        if building_id and building_id != property_item.get("building_id"):
+        if building_id is not None and building_id != property_item.get("building_id"):
             # Find the new building
-            buildings = data.get("buildings", [])
+            buildings = db.get_collection("buildings")
             new_building = None
             for b in buildings:
                 if b.get("_id") == building_id or b.get("id") == building_id:
@@ -4177,10 +4177,10 @@ async def update_property(
                     break
             
             if new_building:
-                property_item["building_id"] = building_id
-                property_item["building_name"] = new_building.get("name")
-                property_item["building_address"] = new_building.get("address")
-                property_item["building_state"] = new_building.get("state")
+                update_data["building_id"] = building_id
+                update_data["building_name"] = new_building.get("name")
+                update_data["building_address"] = new_building.get("address")
+                update_data["building_state"] = new_building.get("state")
         
         # Upload new photos if provided
         if photos:
@@ -4196,21 +4196,23 @@ async def update_property(
                 # Keep existing photos and add new ones (limit to MAX_PHOTOS)
                 existing_photos = property_item.get("photos", [])
                 all_photos = existing_photos + photo_urls
-                property_item["photos"] = all_photos[:MAX_PHOTOS]
+                update_data["photos"] = all_photos[:MAX_PHOTOS]
         
-        property_item["updated_at"] = datetime.now().isoformat()
+        # Always update the updated_at timestamp
+        update_data["updated_at"] = datetime.now().isoformat()
         
-        # Update the property in the list
-        data["properties"][property_index] = property_item
-        
-        # Save the entire data
-        success = db.update_data(data)
+        # Save to database using update_collection_item
+        success = db.update_collection_item("properties", property_id_to_update, update_data)
         
         if success:
+            # Get the updated property
+            updated_property = property_item.copy()
+            updated_property.update(update_data)
+            
             return JSONResponse({
                 "success": True,
-                "message": f"Property '{property_item.get('name')}' updated successfully",
-                "property": property_item
+                "message": f"Property '{updated_property.get('name')}' updated successfully",
+                "property": updated_property
             })
         else:
             return JSONResponse(
@@ -4225,10 +4227,11 @@ async def update_property(
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        ) 
+        )
+
     
 # ============================================
-# GET BUILDING DETAILS FOR EDIT
+# GET BUILDING DETAILS FOR EDIT - FIXED
 # ============================================
 @router.get("/get_building_details/{building_id}")
 async def get_building_details(request: Request, building_id: str):
@@ -4262,11 +4265,12 @@ async def get_building_details(request: Request, building_id: str):
             )
         
         # Check permission
-        if category == "Administrator" and building.get("created_by") != current_user.get("user_id"):
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "detail": "You can only view buildings you created"}
-            )
+        if category == "Administrator":
+            if building.get("created_by") != current_user.get("user_id"):
+                return JSONResponse(
+                    status_code=403,
+                    content={"success": False, "detail": "You can only view buildings you created"}
+                )
         
         return JSONResponse({
             "success": True,
@@ -4282,7 +4286,7 @@ async def get_building_details(request: Request, building_id: str):
 
 
 # ============================================
-# GET PROPERTY DETAILS FOR EDIT
+# GET PROPERTY DETAILS FOR EDIT - FIXED
 # ============================================
 @router.get("/get_property_details_for_edit/{property_id}")
 async def get_property_details_for_edit(request: Request, property_id: str):
@@ -4316,11 +4320,12 @@ async def get_property_details_for_edit(request: Request, property_id: str):
             )
         
         # Check permission
-        if category == "Administrator" and property_item.get("created_by") != current_user.get("user_id"):
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "detail": "You can only view properties you created"}
-            )
+        if category == "Administrator":
+            if property_item.get("created_by") != current_user.get("user_id"):
+                return JSONResponse(
+                    status_code=403,
+                    content={"success": False, "detail": "You can only view properties you created"}
+                )
         
         return JSONResponse({
             "success": True,
@@ -4332,4 +4337,5 @@ async def get_property_details_for_edit(request: Request, property_id: str):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        )    
+        )
+    
