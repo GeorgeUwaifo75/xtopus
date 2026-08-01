@@ -113,12 +113,14 @@ async def login_page(request: Request):
         if user:
             return RedirectResponse(url="/dashboard", status_code=303)
     
-    # Get success message from query params
+    # Get messages from query params
     success = request.query_params.get("success", "")
+    error = request.query_params.get("error", "")
     
     return templates.TemplateResponse("login.html", {
         "request": request,
-        "success": success
+        "success": success,
+        "error": error
     })
 
 @app.get("/signup", response_class=HTMLResponse)

@@ -3430,5 +3430,296 @@ function switchTab(moduleId, tabId) {
     // Show the target content
     targetContent.style.display = 'block';
 }
+
+// Add these functions to admin.html
+
+// ============================================
+// BUILDING EDIT FUNCTIONS
+// ============================================
+
+async function editBuilding(buildingId) {
+    // Show loading
+    showToast('⏳ Loading building details...', 'info');
+    
+    try {
+        const response = await fetch(`/api/admin/get_building_details/${buildingId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const building = data.building;
+            
+            // Create edit form
+            const editForm = document.createElement('div');
+            editForm.id = 'buildingEditForm';
+            editForm.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                padding: 2rem;
+                border-radius: 12px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                z-index: 99999;
+                max-width: 500px;
+                width: 95%;
+                max-height: 90vh;
+                overflow-y: auto;
+            `;
+            
+            editForm.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h3 style="margin:0; color:#8B5CF6;">✏️ Edit Building</h3>
+                    <button onclick="document.getElementById('buildingEditForm').remove()" 
+                            style="background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+                </div>
+                <form id="editBuildingForm" enctype="multipart/form-data">
+                    <input type="text" name="name" value="${building.name || ''}" placeholder="Building Name" class="form-control" required style="margin-bottom:0.5rem;">
+                    <textarea name="description" placeholder="Description" class="form-control" required style="margin-bottom:0.5rem;">${building.description || ''}</textarea>
+                    <input type="text" name="address" value="${building.address || ''}" placeholder="Address" class="form-control" required style="margin-bottom:0.5rem;">
+                    <input type="text" name="state" value="${building.state || ''}" placeholder="State" class="form-control" required style="margin-bottom:0.5rem;">
+                    <input type="text" name="unit_type" value="${building.unit_type || ''}" placeholder="Unit Type" class="form-control" required style="margin-bottom:0.5rem;">
+                    <input type="number" name="number_of_units" value="${building.number_of_units || ''}" placeholder="Number of Units" class="form-control" required style="margin-bottom:0.5rem;">
+                    <input type="text" name="category" value="${building.category || ''}" placeholder="Category" class="form-control" required style="margin-bottom:0.5rem;">
+                    
+                    <div style="border:1px dashed #ccc; padding:1rem; border-radius:8px; margin-bottom:0.5rem;">
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Add Photos (Optional - Max 4)</label>
+                        <input type="file" name="photos" accept="image/*" multiple class="form-control" style="padding:0.5rem;">
+                        <small style="color:#666;">Leave empty to keep existing photos. Max 4 photos.</small>
+                        ${building.photos && building.photos.length > 0 ? `
+                            <div style="margin-top:0.5rem;">
+                                <p style="font-size:0.8rem; color:#666;">Current photos: ${building.photos.length}</p>
+                                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                    ${building.photos.slice(0, 4).map(photo => `
+                                        <img src="${photo}" style="width:60px; height:60px; object-fit:cover; border-radius:4px; border:1px solid #eee;">
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" style="width:100%;">Update Building</button>
+                </form>
+                <div id="editBuildingResult" style="margin-top:0.5rem;"></div>
+            `;
+            
+            document.body.appendChild(editForm);
+            
+            // Add overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'editOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                z-index: 99998;
+            `;
+            overlay.onclick = function() {
+                document.getElementById('buildingEditForm')?.remove();
+                this.remove();
+            };
+            document.body.appendChild(overlay);
+            
+            // Handle form submission
+            document.getElementById('editBuildingForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const submitButton = this.querySelector('button[type="submit"]');
+                const resultDiv = document.getElementById('editBuildingResult');
+                const formData = new FormData(this);
+                
+                if (submitButton) {
+                    showButtonSpinner(submitButton);
+                }
+                resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Updating building...</div>';
+                
+                try {
+                    const response = await fetch(`/api/admin/update_building/${buildingId}`, {
+                        method: 'PUT',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
+                        showToast('✅ Building updated successfully!', 'success');
+                        setTimeout(() => {
+                            document.getElementById('buildingEditForm')?.remove();
+                            document.getElementById('editOverlay')?.remove();
+                            loadBuildingsForManagement();
+                        }, 1500);
+                    } else {
+                        resultDiv.innerHTML = `<div class="alert alert-error">❌ ${data.detail || 'Failed to update building'}</div>`;
+                    }
+                } catch (error) {
+                    resultDiv.innerHTML = `<div class="alert alert-error">❌ Error: ${error.message}</div>`;
+                } finally {
+                    if (submitButton) {
+                        hideButtonSpinner(submitButton);
+                    }
+                }
+            });
+            
+        } else {
+            showToast('❌ ' + (data.detail || 'Failed to load building details'), 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error: ' + error.message, 'error');
+    }
+}
+
+
+// ============================================
+// PROPERTY EDIT FUNCTIONS
+// ============================================
+
+async function editProperty(propertyId) {
+    showToast('⏳ Loading property details...', 'info');
+    
+    try {
+        const response = await fetch(`/api/admin/get_property_details_for_edit/${propertyId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const prop = data.property;
+            
+            // Get all buildings for dropdown
+            const buildingsResponse = await fetch('/api/admin/get_all_buildings');
+            const buildingsData = await buildingsResponse.json();
+            const buildings = buildingsData.success ? buildingsData.buildings : [];
+            
+            const editForm = document.createElement('div');
+            editForm.id = 'propertyEditForm';
+            editForm.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                padding: 2rem;
+                border-radius: 12px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                z-index: 99999;
+                max-width: 500px;
+                width: 95%;
+                max-height: 90vh;
+                overflow-y: auto;
+            `;
+            
+            let buildingOptions = '<option value="">Select Building</option>';
+            buildings.forEach(b => {
+                const selected = b._id === prop.building_id || b.id === prop.building_id ? 'selected' : '';
+                buildingOptions += `<option value="${b._id || b.id}" ${selected}>${b.name}</option>`;
+            });
+            
+            editForm.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h3 style="margin:0; color:#8B5CF6;">✏️ Edit Property</h3>
+                    <button onclick="document.getElementById('propertyEditForm').remove(); document.getElementById('editOverlay')?.remove();" 
+                            style="background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+                </div>
+                <form id="editPropertyForm" enctype="multipart/form-data">
+                    <input type="text" name="name" value="${prop.name || ''}" placeholder="Property Name" class="form-control" required style="margin-bottom:0.5rem;">
+                    <textarea name="description" placeholder="Description" class="form-control" required style="margin-bottom:0.5rem;">${prop.description || ''}</textarea>
+                    <select name="building_id" class="form-control" required style="margin-bottom:0.5rem;">
+                        ${buildingOptions}
+                    </select>
+                    <input type="number" name="price" value="${prop.price || ''}" placeholder="Price (₦)" class="form-control" required style="margin-bottom:0.5rem;">
+                    <select name="visibility" class="form-control" style="margin-bottom:0.5rem;">
+                        <option value="local" ${prop.visibility === 'local' ? 'selected' : ''}>Local</option>
+                        <option value="public" ${prop.visibility === 'public' ? 'selected' : ''}>Public</option>
+                    </select>
+                    
+                    <div style="border:1px dashed #ccc; padding:1rem; border-radius:8px; margin-bottom:0.5rem;">
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Add Photos (Optional - Max 4)</label>
+                        <input type="file" name="photos" accept="image/*" multiple class="form-control" style="padding:0.5rem;">
+                        <small style="color:#666;">Leave empty to keep existing photos. Max 4 photos.</small>
+                        ${prop.photos && prop.photos.length > 0 ? `
+                            <div style="margin-top:0.5rem;">
+                                <p style="font-size:0.8rem; color:#666;">Current photos: ${prop.photos.length}</p>
+                                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                    ${prop.photos.slice(0, 4).map(photo => `
+                                        <img src="${photo}" style="width:60px; height:60px; object-fit:cover; border-radius:4px; border:1px solid #eee;">
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" style="width:100%;">Update Property</button>
+                </form>
+                <div id="editPropertyResult" style="margin-top:0.5rem;"></div>
+            `;
+            
+            document.body.appendChild(editForm);
+            
+            // Add overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'editOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                z-index: 99998;
+            `;
+            overlay.onclick = function() {
+                document.getElementById('propertyEditForm')?.remove();
+                this.remove();
+            };
+            document.body.appendChild(overlay);
+            
+            // Handle form submission
+            document.getElementById('editPropertyForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const submitButton = this.querySelector('button[type="submit"]');
+                const resultDiv = document.getElementById('editPropertyResult');
+                const formData = new FormData(this);
+                
+                if (submitButton) {
+                    showButtonSpinner(submitButton);
+                }
+                resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Updating property...</div>';
+                
+                try {
+                    const response = await fetch(`/api/admin/update_property/${propertyId}`, {
+                        method: 'PUT',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
+                        showToast('✅ Property updated successfully!', 'success');
+                        setTimeout(() => {
+                            document.getElementById('propertyEditForm')?.remove();
+                            document.getElementById('editOverlay')?.remove();
+                            loadPropertiesForManagement();
+                        }, 1500);
+                    } else {
+                        resultDiv.innerHTML = `<div class="alert alert-error">❌ ${data.detail || 'Failed to update property'}</div>`;
+                    }
+                } catch (error) {
+                    resultDiv.innerHTML = `<div class="alert alert-error">❌ Error: ${error.message}</div>`;
+                } finally {
+                    if (submitButton) {
+                        hideButtonSpinner(submitButton);
+                    }
+                }
+            });
+            
+        } else {
+            showToast('❌ ' + (data.detail || 'Failed to load property details'), 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error: ' + error.message, 'error');
+    }
+}
 </script>
 {% endblock %}

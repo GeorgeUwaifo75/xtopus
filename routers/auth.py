@@ -13,6 +13,8 @@ from models.user import UserCreate, UserLogin, UserCategory
 from database import db
 from security import security
 
+# auth.py - Updated login function with better error handling
+
 @router.post("/login")
 async def login(request: Request):
     """Handle login form submission"""
@@ -22,7 +24,9 @@ async def login(request: Request):
         password = form.get("password")
         
         if not user_id or not password:
-            raise HTTPException(status_code=400, detail="User ID and password required")
+            # Return to login page with error message
+            response = RedirectResponse(url="/login?error=Please enter both User ID and Password", status_code=303)
+            return response
         
         logger.info(f"Login attempt for user: {user_id}")
         
@@ -39,14 +43,21 @@ async def login(request: Request):
         
         if not user:
             logger.warning(f"User not found: {user_id}")
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            response = RedirectResponse(url="/login?error=Invalid User ID or Password", status_code=303)
+            return response
         
         # Verify password
         if not security.verify_password(password, user.get("password")):
             logger.warning(f"Invalid password for user: {user_id}")
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            response = RedirectResponse(url="/login?error=Invalid User ID or Password", status_code=303)
+            return response
         
         logger.info(f"User authenticated: {user_id}")
+        
+        # Check if user is active
+        if user.get("activity_status") == "Inactive":
+            response = RedirectResponse(url="/login?error=Your account has been deactivated. Please contact support.", status_code=303)
+            return response
         
         # Create access token
         token_data = {
@@ -74,12 +85,11 @@ async def login(request: Request):
         )
         return response
         
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Login error: {e}")
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-
+        response = RedirectResponse(url=f"/login?error=Login failed: {str(e)}", status_code=303)
+        return response
+    
 @router.post("/signup")
 async def signup(request: Request):
     """Handle signup form submission"""

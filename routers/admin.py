@@ -3970,3 +3970,355 @@ async def restore_database(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )    
+    
+# ============================================
+# UPDATE BUILDING
+# ============================================
+@router.put("/update_building/{building_id}")
+async def update_building(
+    request: Request,
+    building_id: str,
+    name: str = Form(None),
+    description: str = Form(None),
+    address: str = Form(None),
+    state: str = Form(None),
+    unit_type: str = Form(None),
+    number_of_units: int = Form(None),
+    category: str = Form(None),
+    photos: List[UploadFile] = File(None)
+):
+    """Update an existing building"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        # Find the building
+        buildings = db.get_collection("buildings")
+        building = None
+        building_index = -1
+        for idx, b in enumerate(buildings):
+            if b.get("_id") == building_id or b.get("id") == building_id:
+                building = b
+                building_index = idx
+                break
+        
+        if not building:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Building not found"}
+            )
+        
+        # Check if user has permission to edit this building
+        if category == "Administrator":
+            if building.get("created_by") != current_user.get("user_id"):
+                return JSONResponse(
+                    status_code=403,
+                    content={"success": False, "detail": "You can only edit buildings you created"}
+                )
+        
+        # Update fields
+        if name:
+            building["name"] = name
+        if description:
+            building["description"] = description
+        if address:
+            building["address"] = address
+        if state:
+            building["state"] = state
+        if unit_type:
+            building["unit_type"] = unit_type
+        if number_of_units:
+            building["number_of_units"] = int(number_of_units)
+        if category:
+            building["category"] = category
+        
+        # Upload new photos if provided
+        if photos:
+            validate_photos(photos)
+            photo_urls = []
+            for photo in photos:
+                try:
+                    url = upload_to_firebase(photo, f"buildings/{datetime.now().strftime('%Y%m')}")
+                    photo_urls.append(url)
+                except Exception as e:
+                    logger.error(f"Failed to upload photo: {e}")
+            if photo_urls:
+                # Keep existing photos and add new ones (limit to MAX_PHOTOS)
+                existing_photos = building.get("photos", [])
+                all_photos = existing_photos + photo_urls
+                building["photos"] = all_photos[:MAX_PHOTOS]
+        
+        building["updated_at"] = datetime.now().isoformat()
+        
+        # Save to database
+        data = db.get_data()
+        data["buildings"][building_index] = building
+        success = db.update_data(data)
+        
+        if success:
+            return JSONResponse({
+                "success": True,
+                "message": f"Building '{building.get('name')}' updated successfully",
+                "building": building
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to update building"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error updating building: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# UPDATE PROPERTY
+# ============================================
+@router.put("/update_property/{property_id}")
+async def update_property(
+    request: Request,
+    property_id: str,
+    name: str = Form(None),
+    description: str = Form(None),
+    building_id: str = Form(None),
+    price: float = Form(None),
+    visibility: str = Form(None),
+    photos: List[UploadFile] = File(None)
+):
+    """Update an existing property"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        # Find the property
+        properties = db.get_collection("properties")
+        property_item = None
+        property_index = -1
+        for idx, p in enumerate(properties):
+            if p.get("_id") == property_id or p.get("id") == property_id:
+                property_item = p
+                property_index = idx
+                break
+        
+        if not property_item:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Property not found"}
+            )
+        
+        # Check if user has permission to edit this property
+        if category == "Administrator":
+            if property_item.get("created_by") != current_user.get("user_id"):
+                return JSONResponse(
+                    status_code=403,
+                    content={"success": False, "detail": "You can only edit properties you created"}
+                )
+        
+        # Check if property is occupied
+        if property_item.get("occupied_by"):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Cannot edit an occupied property. The tenant must be removed first."}
+            )
+        
+        # Update fields
+        if name:
+            property_item["name"] = name
+        if description:
+            property_item["description"] = description
+        if price:
+            property_item["price"] = float(price)
+        if visibility:
+            property_item["visibility"] = visibility
+        
+        # Update building reference if changed
+        if building_id and building_id != property_item.get("building_id"):
+            # Find the new building
+            buildings = db.get_collection("buildings")
+            new_building = None
+            for b in buildings:
+                if b.get("_id") == building_id or b.get("id") == building_id:
+                    new_building = b
+                    break
+            
+            if new_building:
+                property_item["building_id"] = building_id
+                property_item["building_name"] = new_building.get("name")
+                property_item["building_address"] = new_building.get("address")
+                property_item["building_state"] = new_building.get("state")
+        
+        # Upload new photos if provided
+        if photos:
+            validate_photos(photos)
+            photo_urls = []
+            for photo in photos:
+                try:
+                    url = upload_to_firebase(photo, f"properties/{datetime.now().strftime('%Y%m')}")
+                    photo_urls.append(url)
+                except Exception as e:
+                    logger.error(f"Failed to upload photo: {e}")
+            if photo_urls:
+                # Keep existing photos and add new ones (limit to MAX_PHOTOS)
+                existing_photos = property_item.get("photos", [])
+                all_photos = existing_photos + photo_urls
+                property_item["photos"] = all_photos[:MAX_PHOTOS]
+        
+        property_item["updated_at"] = datetime.now().isoformat()
+        
+        # Save to database
+        data = db.get_data()
+        data["properties"][property_index] = property_item
+        success = db.update_data(data)
+        
+        if success:
+            return JSONResponse({
+                "success": True,
+                "message": f"Property '{property_item.get('name')}' updated successfully",
+                "property": property_item
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to update property"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error updating property: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# GET BUILDING DETAILS FOR EDIT
+# ============================================
+@router.get("/get_building_details/{building_id}")
+async def get_building_details(request: Request, building_id: str):
+    """Get building details for editing"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        buildings = db.get_collection("buildings")
+        building = None
+        for b in buildings:
+            if b.get("_id") == building_id or b.get("id") == building_id:
+                building = b
+                break
+        
+        if not building:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Building not found"}
+            )
+        
+        # Check permission
+        if category == "Administrator" and building.get("created_by") != current_user.get("user_id"):
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "You can only view buildings you created"}
+            )
+        
+        return JSONResponse({
+            "success": True,
+            "building": building
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting building details: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# GET PROPERTY DETAILS FOR EDIT
+# ============================================
+@router.get("/get_property_details_for_edit/{property_id}")
+async def get_property_details_for_edit(request: Request, property_id: str):
+    """Get property details for editing"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        properties = db.get_collection("properties")
+        property_item = None
+        for p in properties:
+            if p.get("_id") == property_id or p.get("id") == property_id:
+                property_item = p
+                break
+        
+        if not property_item:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Property not found"}
+            )
+        
+        # Check permission
+        if category == "Administrator" and property_item.get("created_by") != current_user.get("user_id"):
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "You can only view properties you created"}
+            )
+        
+        return JSONResponse({
+            "success": True,
+            "property": property_item
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting property details: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    

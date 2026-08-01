@@ -7,24 +7,28 @@
     <h2 style="text-align:center; margin-bottom:1.5rem;">Login to Xtopus</h2>
     
     {% if success %}
-    <div class="alert alert-success" style="margin-bottom:1rem;">{{ success }}</div>
+    <div class="alert alert-success" style="margin-bottom:1rem; padding:0.75rem; background:#D1FAE5; color:#065F46; border-radius:4px;">{{ success }}</div>
+    {% endif %}
+    
+    {% if error %}
+    <div class="alert alert-error" style="margin-bottom:1rem; padding:0.75rem; background:#FEE2E2; color:#991B1B; border-radius:4px;">{{ error }}</div>
     {% endif %}
     
     <form action="/api/auth/login" method="post" id="loginForm">
         <div style="margin-bottom:1rem;">
-            <label style="display:block; margin-bottom:0.5rem;">User ID</label>
-            <input type="text" name="user_id" id="loginUserId" required style="width:100%; padding:0.75rem; border:1px solid #ddd; border-radius:4px;">
+            <label style="display:block; margin-bottom:0.5rem; font-weight:500;">User ID</label>
+            <input type="text" name="user_id" id="loginUserId" required style="width:100%; padding:0.75rem; border:1px solid #ddd; border-radius:4px; font-size:1rem;">
         </div>
         <div style="margin-bottom:1.5rem;">
-            <label style="display:block; margin-bottom:0.5rem;">Password</label>
-            <input type="password" name="password" id="loginPassword" required style="width:100%; padding:0.75rem; border:1px solid #ddd; border-radius:4px;">
+            <label style="display:block; margin-bottom:0.5rem; font-weight:500;">Password</label>
+            <input type="password" name="password" id="loginPassword" required style="width:100%; padding:0.75rem; border:1px solid #ddd; border-radius:4px; font-size:1rem;">
         </div>
         <button type="submit" class="btn btn-primary" id="loginButton" style="width:100%;">
             Login
         </button>
     </form>
     <p style="text-align:center; margin-top:1rem;">
-        Don't have an account? <a href="/signup" style="color:#8B5CF6;">Sign up</a>
+        Don't have an account? <a href="/signup" style="color:#8B5CF6; text-decoration:none;">Sign up</a>
     </p>
 </div>
 
@@ -45,8 +49,6 @@ document.getElementById('loginForm')?.addEventListener('submit', function(e) {
     button.innerHTML = '<span class="spinner-small"></span> Logging in...';
     button.disabled = true;
     button.classList.add('btn-loading');
-    
-    // The form will submit and redirect
 });
 </script>
 {% endblock %}
