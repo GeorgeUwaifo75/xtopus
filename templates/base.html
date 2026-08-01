@@ -797,13 +797,14 @@
         }
     });
 
-    // ============================================
+
+// ============================================
 // REPORT FUNCTIONS
 // ============================================
 
 function showReport(reportType) {
     const reportNames = {
-        // EXISTING
+        // EXISTING - Now will fetch data from API
         'agents': 'All Agents Report',
         'buildings': 'Buildings Report',
         'properties': 'Properties Report',
@@ -853,17 +854,7 @@ function showReport(reportType) {
         }
     }
     
-    // For existing report types, use the old behavior (toast notification)
-    const existingReports = ['agents', 'buildings', 'properties'];
-    if (existingReports.includes(reportType)) {
-        setTimeout(function() {
-            hideSpinner();
-            showToast(`${reportIcons[reportType]} ${reportNames[reportType]} would be displayed here`, 'info');
-        }, 1500);
-        return;
-    }
-    
-    // For new report types, fetch and display the report
+    // ALL reports now fetch data from API (no more toast notifications)
     fetchReportData(reportType);
 }
 
@@ -968,6 +959,47 @@ function renderReportContent(reportType, data) {
     let rows = [];
     
     switch(reportType) {
+        case 'agents':
+            headers = ['#', 'Agent Name', 'Email', 'Phone', 'Properties', 'Tenants', 'Status', 'Created'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.name || item.user_id || 'Unknown',
+                item.email || 'N/A',
+                item.phone || 'N/A',
+                item.property_count || 0,
+                item.tenant_count || 0,
+                `<span style="background:${item.status === 'Active' ? '#D1FAE5' : '#FEE2E2'}; color:${item.status === 'Active' ? '#065F46' : '#991B1B'}; padding:0.2rem 0.6rem; border-radius:12px; font-size:0.75rem;">${item.status || 'Unknown'}</span>`,
+                item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'
+            ]);
+            break;
+            
+        case 'buildings':
+            headers = ['#', 'Building Name', 'Address', 'State', 'Units', 'Properties', 'Available', 'Occupied'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.name || 'Unknown',
+                item.address || 'N/A',
+                item.state || 'N/A',
+                item.number_of_units || 0,
+                item.property_count || 0,
+                `<span style="color:#10B981;">${item.available_count || 0}</span>`,
+                `<span style="color:#EF4444;">${item.occupied_count || 0}</span>`
+            ]);
+            break;
+            
+        case 'properties':
+            headers = ['#', 'Property Name', 'Building', 'Price', 'Status', 'Occupant', 'Created By'];
+            rows = items.map((item, i) => [
+                i + 1,
+                item.name || 'Unknown',
+                item.building_name || 'N/A',
+                `₦${Number(item.price || 0).toLocaleString()}`,
+                `<span style="background:${item.available ? '#D1FAE5' : '#FEE2E2'}; color:${item.available ? '#065F46' : '#991B1B'}; padding:0.2rem 0.6rem; border-radius:12px; font-size:0.75rem;">${item.available ? 'Available' : 'Occupied'}</span>`,
+                item.occupant || 'Vacant',
+                item.created_by || 'Unknown'
+            ]);
+            break;
+            
         case 'complaints':
             headers = ['#', 'User', 'Subject', 'Status', 'Created'];
             rows = items.map((item, i) => [

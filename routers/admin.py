@@ -4928,4 +4928,218 @@ async def get_profit_loss_report(request: Request):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
+        ) 
+    
+# ============================================
+# REPORT ENDPOINTS - AGENTS, BUILDINGS, PROPERTIES
+# ============================================
+
+@router.get("/reports/agents")
+async def get_agents_report(request: Request):
+    """Get all agents report"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        users = db.get_collection("users")
+        agents = []
+        
+        for u in users:
+            if u.get("user_category") == "Agent":
+                # Get agent's property count
+                properties = db.get_collection("properties")
+                property_count = len([p for p in properties if p.get("created_by") == u.get("user_id")])
+                
+                # Get tenant count assigned by this agent
+                tenant_count = len([t for t in users if t.get("tenant_assigned_by") == u.get("user_id") and t.get("user_category") == "Tenant"])
+                
+                agents.append({
+                    "user_id": u.get("user_id"),
+                    "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id"),
+                    "email": u.get("email", ""),
+                    "phone": u.get("phone", "N/A"),
+                    "property_count": property_count,
+                    "tenant_count": tenant_count,
+                    "status": u.get("activity_status", "Active"),
+                    "created_at": u.get("created_at", ""),
+                    "created_by": u.get("created_by", ""),
+                    "created_by_name": u.get("created_by_name", "")
+                })
+        
+        # Sort by created_at descending
+        agents.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        total_properties = sum(a['property_count'] for a in agents)
+        total_tenants = sum(a['tenant_count'] for a in agents)
+        
+        return JSONResponse({
+            "success": True,
+            "data": agents,
+            "count": len(agents),
+            "summary": f"{len(agents)} agent(s) managing {total_properties} properties and {total_tenants} tenant(s)"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting agents report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/buildings")
+async def get_buildings_report(request: Request):
+    """Get all buildings report"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        buildings = db.get_collection("buildings")
+        properties = db.get_collection("properties")
+        
+        # If Administrator, only show buildings they created
+        if category == "Administrator":
+            user_id = current_user.get("user_id")
+            buildings = [b for b in buildings if b.get("created_by") == user_id]
+        
+        building_data = []
+        for b in buildings:
+            # Count properties in this building
+            prop_count = len([p for p in properties if p.get("building_id") == b.get("_id") or p.get("building_id") == b.get("id")])
+            
+            # Count available properties
+            available_count = len([p for p in properties if (p.get("building_id") == b.get("_id") or p.get("building_id") == b.get("id")) and p.get("available", True)])
+            
+            # Count occupied properties
+            occupied_count = prop_count - available_count
+            
+            building_data.append({
+                "name": b.get("name", "Unknown"),
+                "address": b.get("address", "N/A"),
+                "state": b.get("state", "N/A"),
+                "unit_type": b.get("unit_type", "N/A"),
+                "number_of_units": b.get("number_of_units", 0),
+                "category": b.get("category", "N/A"),
+                "property_count": prop_count,
+                "available_count": available_count,
+                "occupied_count": occupied_count,
+                "created_by": b.get("created_by_name", b.get("created_by", "Unknown")),
+                "created_at": b.get("created_at", ""),
+                "photos": b.get("photos", [])
+            })
+        
+        # Sort by created_at descending
+        building_data.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        total_units = sum(b['number_of_units'] for b in building_data)
+        total_properties = sum(b['property_count'] for b in building_data)
+        
+        return JSONResponse({
+            "success": True,
+            "data": building_data,
+            "count": len(building_data),
+            "summary": f"{len(building_data)} building(s) with {total_properties} property(ies) and {total_units} total unit(s)"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting buildings report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+@router.get("/reports/properties")
+async def get_properties_report(request: Request):
+    """Get all properties report"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        properties = db.get_collection("properties")
+        users = db.get_collection("users")
+        
+        # If Administrator, only show properties they created
+        if category == "Administrator":
+            user_id = current_user.get("user_id")
+            properties = [p for p in properties if p.get("created_by") == user_id]
+        
+        # Build user lookup for names
+        user_map = {}
+        for u in users:
+            user_map[u.get("user_id")] = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id")
+        
+        property_data = []
+        for p in properties:
+            occupied_by = p.get("occupied_by")
+            occupant_name = user_map.get(occupied_by, occupied_by or "Vacant")
+            
+            property_data.append({
+                "name": p.get("name", "Unknown"),
+                "description": p.get("description", ""),
+                "building_name": p.get("building_name", "Unknown Building"),
+                "building_address": p.get("building_address", "N/A"),
+                "price": p.get("price", 0),
+                "visibility": p.get("visibility", "local"),
+                "available": p.get("available", True),
+                "occupant": occupant_name,
+                "occupied_by": occupied_by,
+                "created_by": p.get("created_by_name", p.get("created_by", "Unknown")),
+                "created_at": p.get("created_at", ""),
+                "photos": p.get("photos", [])
+            })
+        
+        # Sort by created_at descending
+        property_data.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        total_properties = len(property_data)
+        available_properties = len([p for p in property_data if p.get("available")])
+        occupied_properties = total_properties - available_properties
+        total_value = sum(p['price'] for p in property_data)
+        
+        return JSONResponse({
+            "success": True,
+            "data": property_data,
+            "count": total_properties,
+            "summary": f"{total_properties} property(ies): {available_properties} available, {occupied_properties} occupied, Total Value: ₦{total_value:,}"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting properties report: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
         )    
