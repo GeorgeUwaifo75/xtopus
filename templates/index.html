@@ -12,7 +12,7 @@
     {% if properties %}
     <div class="property-grid">
         {% for property in properties %}
-        <div class="property-card">
+        <div class="property-card" onclick="showPropertyDetails('{{ property._id or property.id }}')" style="cursor:pointer;">
             <!-- Property Image -->
             {% if property.photos and property.photos|length > 0 %}
             <div style="width:100%; height:200px; overflow:hidden; background:#f0f0f0;">
@@ -47,7 +47,7 @@
                     <img src="{{ photo }}" 
                          alt="Property photo" 
                          style="width:50px; height:50px; object-fit:cover; border-radius:4px; border:1px solid #eee; cursor:pointer;"
-                         onclick="window.open('{{ photo }}', '_blank')">
+                         onclick="event.stopPropagation(); window.open('{{ photo }}', '_blank')">
                     {% endfor %}
                     {% if property.photos|length > 4 %}
                     <span style="display:flex; align-items:center; color:#999; font-size:0.8rem; padding:0 0.5rem;">
@@ -56,6 +56,10 @@
                     {% endif %}
                 </div>
                 {% endif %}
+                
+                <div style="margin-top:0.5rem; font-size:0.8rem; color:#8B5CF6; text-align:right;">
+                    👆 Click for details &amp; chat
+                </div>
             </div>
         </div>
         {% endfor %}
@@ -68,6 +72,20 @@
     {% endif %}
 </div>
 
+<!-- Property Detail Modal -->
+<div id="propertyModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(4px);">
+    <div style="background:white; border-radius:12px; max-width:600px; width:95%; max-height:90vh; overflow-y:auto; padding:2rem; position:relative; animation:scaleIn 0.3s ease;">
+        <button onclick="closePropertyModal()" style="position:absolute; top:1rem; right:1rem; background:#EF4444; color:white; border:none; border-radius:50%; width:35px; height:35px; cursor:pointer; font-size:1.2rem;">×</button>
+        
+        <div id="modalContent">
+            <div style="color:#8B5CF6; text-align:center; padding:2rem;">
+                <div style="display:inline-block; width:40px; height:40px; border:3px solid #f3f3f3; border-top:3px solid #8B5CF6; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+                <p style="margin-top:0.5rem;">Loading property details...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 .property-card {
     background: var(--white);
@@ -75,6 +93,7 @@
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
 }
 
 .property-card:hover {
@@ -116,5 +135,557 @@
     color: var(--primary-purple);
     font-size: 1.1rem;
 }
+
+@keyframes scaleIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Toast notification styles */
+.toast-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: white;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 99999;
+    max-width: 450px;
+    animation: slideIn 0.3s ease;
+    font-family: Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
 </style>
+
+<script>
+// ============================================
+// TOAST NOTIFICATION
+// ============================================
+function showToast(message, type = 'success') {
+    const colors = {
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B',
+        info: '#8B5CF6'
+    };
+    
+    // Remove existing toast
+    const existing = document.querySelector('.toast-notification');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification';
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 99999;
+        border-left: 4px solid ${colors[type] || '#8B5CF6'};
+        max-width: 450px;
+        animation: slideIn 0.3s ease;
+        font-family: Arial, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    `;
+    
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+    
+    toast.innerHTML = `
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+            <span style="font-size:1.25rem;">${icons[type] || 'ℹ️'}</span>
+            <span style="white-space:pre-line;">${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" 
+                style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#9CA3AF; padding:0 0 0 1rem;">
+            ×
+        </button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+// ============================================
+// PROPERTY DETAIL MODAL
+// ============================================
+async function showPropertyDetails(propertyId) {
+    console.log('showPropertyDetails called with:', propertyId);
+    
+    const modal = document.getElementById('propertyModal');
+    const content = document.getElementById('modalContent');
+    
+    if (!modal || !content) {
+        console.error('Modal elements not found');
+        showToast('Error: Modal not found', 'error');
+        return;
+    }
+    
+    modal.style.display = 'flex';
+    content.innerHTML = `
+        <div style="text-align:center; padding:2rem; color:#8B5CF6;">
+            <div style="display:inline-block; width:40px; height:40px; border:3px solid #f3f3f3; border-top:3px solid #8B5CF6; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+            <p style="margin-top:0.5rem;">Loading property details...</p>
+        </div>
+    `;
+    
+    try {
+        // Check if user is logged in - we can check for session token in cookies
+        const hasSession = document.cookie.split('; ').some(row => row.startsWith('session_token='));
+        
+        // If not logged in, show login prompt instead of trying to load
+        if (!hasSession) {
+            content.innerHTML = `
+                <div style="text-align:center; padding:1rem;">
+                    <h2 style="color:#8B5CF6; margin-top:0;">🔒 Login Required</h2>
+                    <p style="color:#666; margin:1rem 0;">Please log in to view property details and chat with the agent.</p>
+                    <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+                        <a href="/login" class="btn btn-primary" style="text-decoration:none;">🔑 Login</a>
+                        <a href="/signup" class="btn btn-secondary" style="text-decoration:none;">📝 Sign Up</a>
+                        <button onclick="closePropertyModal()" class="btn btn-secondary">Close</button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        // User is logged in, fetch property details
+        const response = await fetch(`/api/properties/get_property_details/${propertyId}`);
+        const data = await response.json();
+        console.log('Property details response:', data);
+        
+        if (data.success && data.property) {
+            const prop = data.property;
+            const agent = data.agent || {};
+            const escalationContacts = data.escalation_contacts || [];
+            const chatMessages = data.chat_messages || [];
+            const currentUserId = '{{ user.user_id if user else "" }}';
+            
+            // Build escalation contacts HTML
+            let escalationHtml = '';
+            if (escalationContacts.length > 0) {
+                escalationHtml = `
+                    <div style="margin:1rem 0; padding:1rem; background:#fef3c7; border-radius:8px; border-left:4px solid #F59E0B;">
+                        <h4 style="margin-top:0; color:#92400E;">📞 Contact & Escalation</h4>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
+                `;
+                escalationContacts.forEach((contact, index) => {
+                    const levelIcon = index === 0 ? '⭐' : '⬆️';
+                    const levelColor = index === 0 ? '#10B981' : '#F59E0B';
+                    escalationHtml += `
+                        <div style="border:1px solid #e0e0e0; padding:0.75rem; border-radius:6px; background:white;">
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <span style="color:${levelColor};">${levelIcon}</span>
+                                <strong>Level ${index + 1}:</strong>
+                                <span style="color:#8B5CF6;">${contact.role || 'Support'}</span>
+                            </div>
+                            <div style="font-size:0.9rem; margin-top:0.25rem;">
+                                <div><strong>${contact.name || 'Unknown'}</strong></div>
+                                <div style="color:#666; font-size:0.8rem;">
+                                    📞 ${contact.phone || 'Not provided'}
+                                </div>
+                                <div style="color:#666; font-size:0.8rem;">
+                                    ✉️ ${contact.email || 'Not provided'}
+                                </div>
+                                <div style="color:#999; font-size:0.7rem; margin-top:0.25rem;">
+                                    ${contact.response_time || ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                escalationHtml += `
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Build chat messages HTML
+            let chatHtml = '';
+            if (chatMessages.length > 0) {
+                chatMessages.forEach(msg => {
+                    const isOwn = msg.sender_id === currentUserId;
+                    const msgTime = msg.created_at ? new Date(msg.created_at).toLocaleString() : '';
+                    chatHtml += `
+                        <div style="text-align:${isOwn ? 'right' : 'left'}; margin:0.5rem 0;">
+                            <div style="display:inline-block; background:${isOwn ? '#8B5CF6' : 'white'}; color:${isOwn ? 'white' : '#333'}; padding:0.5rem 1rem; border-radius:12px; max-width:80%; word-wrap:break-word; ${!isOwn ? 'border:1px solid #e0e0e0;' : ''}">
+                                ${msg.message}
+                                <div style="font-size:0.6rem; color:${isOwn ? 'rgba(255,255,255,0.7)' : '#999'}; margin-top:0.25rem;">
+                                    ${msg.sender_name || msg.sender_id} • ${msgTime}
+                                    ${msg.escalated ? ' ⚠️ Escalated' : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            let photosHtml = '';
+            if (prop.photos && prop.photos.length > 0) {
+                photosHtml = `
+                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:0.5rem; margin:1rem 0;">
+                        ${prop.photos.map(photo => `
+                            <img src="${photo}" 
+                                 alt="Property photo" 
+                                 style="width:100%; height:120px; object-fit:cover; border-radius:8px; cursor:pointer;"
+                                 onclick="window.open('${photo}', '_blank');">
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = `
+                <h2 style="color:#8B5CF6; margin-top:0;">${prop.name}</h2>
+                
+                ${photosHtml}
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin:1rem 0; background:#f8f9fa; padding:1rem; border-radius:8px;">
+                    <div><strong>📍 Building:</strong> ${prop.building_name || 'Unknown'}</div>
+                    <div><strong>💰 Price:</strong> ₦${Number(prop.price).toLocaleString()}</div>
+                    <div><strong>📋 Status:</strong> <span style="color:#10B981; font-weight:500;">Available</span></div>
+                    <div><strong>📅 Added:</strong> ${prop.created_at ? new Date(prop.created_at).toLocaleDateString() : 'N/A'}</div>
+                    <div style="grid-column: span 2;"><strong>🏢 Address:</strong> ${prop.building_address || 'Not specified'}</div>
+                </div>
+                
+                <div style="margin:1rem 0;">
+                    <h4>📝 Description</h4>
+                    <p style="background:#f8f9fa; padding:0.75rem; border-radius:8px; margin-top:0.25rem; line-height:1.6;">${prop.description || 'No description available.'}</p>
+                </div>
+                
+                ${escalationHtml}
+                
+                <!-- Chat Module -->
+                <div style="margin:1rem 0; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden;">
+                    <div style="background:#8B5CF6; color:white; padding:0.75rem 1rem; display:flex; justify-content:space-between; align-items:center;">
+                        <span>💬 Chat with Agent</span>
+                        <span style="font-size:0.8rem; opacity:0.8;">${agent.name || 'Property Manager'}</span>
+                    </div>
+                    <div style="padding:1rem; max-height:250px; overflow-y:auto; background:#f8f9fa;" id="chatMessages">
+                        ${chatHtml || '<div style="text-align:center; color:#999; font-size:0.9rem; padding:1rem 0;">No messages yet. Start a conversation with the agent.</div>'}
+                    </div>
+                    <div style="display:flex; padding:0.5rem; background:white; border-top:1px solid #e0e0e0;">
+                        <input type="text" id="chatInput" placeholder="Type your message..." style="flex:1; padding:0.5rem; border:1px solid #ddd; border-radius:4px; margin-right:0.5rem;" onkeypress="if(event.key==='Enter') sendChatMessage('${prop._id || prop.id}')">
+                        <button onclick="sendChatMessage('${prop._id || prop.id}')" class="btn btn-primary" style="padding:0.5rem 1rem;">Send</button>
+                    </div>
+                    <div id="escalationInfo" style="padding:0.5rem 1rem; background:#fef3c7; display:none; font-size:0.8rem; color:#92400E;">
+                        ⏳ If you don't receive a response in 3 hours, click the "Escalate" button below.
+                    </div>
+                    <div style="display:flex; gap:0.5rem; padding:0.5rem 1rem; background:white; border-top:1px solid #e0e0e0;">
+                        <button onclick="escalateChat('${prop._id || prop.id}')" class="btn btn-primary" style="background:#F59E0B; font-size:0.8rem;">
+                            ⬆️ Escalate to Admin
+                        </button>
+                        <button onclick="refreshChat('${prop._id || prop.id}')" class="btn btn-secondary" style="font-size:0.8rem;">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="display:flex; gap:0.5rem; margin-top:1rem; flex-wrap:wrap;">
+                    <button onclick="closePropertyModal()" class="btn btn-secondary">Close</button>
+                    ${prop.available ? `<button onclick="requestProperty('${prop._id || prop.id}')" class="btn btn-primary">🏠 Request Property</button>` : ''}
+                    ${escalationContacts.length > 1 ? `<span style="font-size:0.7rem; color:#666; padding:0.5rem;">${escalationContacts.length} level(s) of support available</span>` : ''}
+                </div>
+            `;
+            
+            // Show escalation info if there are multiple contacts
+            if (escalationContacts.length > 1) {
+                const escalationInfo = document.getElementById('escalationInfo');
+                if (escalationInfo) escalationInfo.style.display = 'block';
+            }
+            
+        } else {
+            content.innerHTML = `
+                <div style="text-align:center; padding:2rem;">
+                    <p style="color:#EF4444;">❌ ${data.detail || 'Property not found'}</p>
+                    <button onclick="closePropertyModal()" class="btn btn-secondary" style="margin-top:1rem;">Close</button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading property details:', error);
+        content.innerHTML = `
+            <div style="text-align:center; padding:2rem;">
+                <p style="color:#EF4444;">❌ Error loading property details: ${error.message}</p>
+                <button onclick="closePropertyModal()" class="btn btn-secondary" style="margin-top:1rem;">Close</button>
+            </div>
+        `;
+    }
+}
+
+function closePropertyModal() {
+    document.getElementById('propertyModal').style.display = 'none';
+}
+
+// Close modal on outside click
+document.getElementById('propertyModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closePropertyModal();
+    }
+});
+
+// ============================================
+// SEND CHAT MESSAGE
+// ============================================
+async function sendChatMessage(propertyId) {
+    const input = document.getElementById('chatInput');
+    const messagesContainer = document.getElementById('chatMessages');
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    // Add user message to chat
+    const userMsg = document.createElement('div');
+    userMsg.style.cssText = 'text-align:right; margin:0.5rem 0;';
+    userMsg.innerHTML = `
+        <span style="display:inline-block; background:#8B5CF6; color:white; padding:0.5rem 1rem; border-radius:12px; max-width:80%; word-wrap:break-word;">
+            ${message}
+            <div style="font-size:0.6rem; color:rgba(255,255,255,0.7); margin-top:0.25rem;">
+                You • Sending...
+            </div>
+        </span>
+    `;
+    messagesContainer.appendChild(userMsg);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    input.value = '';
+    
+    try {
+        const response = await fetch('/api/properties/send_property_message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                property_id: propertyId,
+                message: message
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update the sent message status
+            const lastMsg = messagesContainer.lastChild;
+            if (lastMsg) {
+                lastMsg.innerHTML = `
+                    <span style="display:inline-block; background:#8B5CF6; color:white; padding:0.5rem 1rem; border-radius:12px; max-width:80%; word-wrap:break-word;">
+                        ${message}
+                        <div style="font-size:0.6rem; color:rgba(255,255,255,0.7); margin-top:0.25rem;">
+                            You • Sent ✓
+                        </div>
+                    </span>
+                `;
+            }
+            
+            // Add agent response if available
+            if (data.response) {
+                const agentMsg = document.createElement('div');
+                agentMsg.style.cssText = 'text-align:left; margin:0.5rem 0;';
+                agentMsg.innerHTML = `
+                    <div style="display:inline-block; background:white; color:#333; padding:0.5rem 1rem; border-radius:12px; max-width:80%; word-wrap:break-word; border:1px solid #e0e0e0;">
+                        ${data.response}
+                        <div style="font-size:0.6rem; color:#999; margin-top:0.25rem;">
+                            System • Auto-response
+                        </div>
+                    </div>
+                `;
+                messagesContainer.appendChild(agentMsg);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+            
+            // Show escalation info if available
+            if (data.escalation_available) {
+                const escalationInfo = document.getElementById('escalationInfo');
+                if (escalationInfo) escalationInfo.style.display = 'block';
+            }
+            
+            showToast('✅ Message sent successfully!', 'success');
+        } else {
+            showToast('❌ Failed to send message: ' + (data.detail || 'Unknown error'), 'error');
+            // Restore the message input
+            const lastMsg = messagesContainer.lastChild;
+            if (lastMsg) {
+                lastMsg.innerHTML = `
+                    <span style="display:inline-block; background:#EF4444; color:white; padding:0.5rem 1rem; border-radius:12px; max-width:80%; word-wrap:break-word;">
+                        ${message}
+                        <div style="font-size:0.6rem; color:rgba(255,255,255,0.7); margin-top:0.25rem;">
+                            Failed to send ❌
+                        </div>
+                    </span>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error('Error sending chat:', error);
+        showToast('❌ Error sending message: ' + error.message, 'error');
+    }
+}
+
+// ============================================
+// ESCALATE CHAT
+// ============================================
+async function escalateChat(propertyId) {
+    if (!confirm('Are you sure you want to escalate this conversation to administrators? They will be notified immediately.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/properties/escalate_chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                property_id: propertyId
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('✅ Chat escalated! Administrators have been notified.', 'success');
+            
+            // Add escalation notice to chat
+            const messagesContainer = document.getElementById('chatMessages');
+            if (messagesContainer) {
+                const escalationMsg = document.createElement('div');
+                escalationMsg.style.cssText = 'text-align:center; margin:0.5rem 0;';
+                escalationMsg.innerHTML = `
+                    <div style="display:inline-block; background:#FEF3C7; color:#92400E; padding:0.5rem 1rem; border-radius:12px; font-size:0.8rem; border:1px solid #F59E0B;">
+                        ⚠️ This conversation has been escalated to administrators.
+                    </div>
+                `;
+                messagesContainer.appendChild(escalationMsg);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+            
+            const escalationInfo = document.getElementById('escalationInfo');
+            if (escalationInfo) escalationInfo.style.display = 'none';
+        } else {
+            showToast('❌ Failed to escalate: ' + (data.detail || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Error escalating chat:', error);
+        showToast('❌ Error escalating: ' + error.message, 'error');
+    }
+}
+
+// ============================================
+// REFRESH CHAT
+// ============================================
+async function refreshChat(propertyId) {
+    const messagesContainer = document.getElementById('chatMessages');
+    const escalationInfo = document.getElementById('escalationInfo');
+    
+    if (!messagesContainer) return;
+    
+    messagesContainer.innerHTML = `
+        <div style="text-align:center; color:#8B5CF6; padding:1rem 0;">
+            <div style="display:inline-block; width:20px; height:20px; border:2px solid #f3f3f3; border-top:2px solid #8B5CF6; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+            Loading messages...
+        </div>
+    `;
+    
+    try {
+        const response = await fetch(`/api/properties/get_property_chats/${propertyId}`);
+        const data = await response.json();
+        
+        if (data.success && data.messages) {
+            let chatHtml = '';
+            const currentUserId = '{{ user.user_id if user else "" }}';
+            data.messages.forEach(msg => {
+                const isOwn = msg.sender_id === currentUserId;
+                const msgTime = msg.created_at ? new Date(msg.created_at).toLocaleString() : '';
+                chatHtml += `
+                    <div style="text-align:${isOwn ? 'right' : 'left'}; margin:0.5rem 0;">
+                        <div style="display:inline-block; background:${isOwn ? '#8B5CF6' : 'white'}; color:${isOwn ? 'white' : '#333'}; padding:0.5rem 1rem; border-radius:12px; max-width:80%; word-wrap:break-word; ${!isOwn ? 'border:1px solid #e0e0e0;' : ''}">
+                            ${msg.message}
+                            <div style="font-size:0.6rem; color:${isOwn ? 'rgba(255,255,255,0.7)' : '#999'}; margin-top:0.25rem;">
+                                ${msg.sender_name || msg.sender_id} • ${msgTime}
+                                ${msg.escalated ? ' ⚠️ Escalated' : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (chatHtml) {
+                messagesContainer.innerHTML = chatHtml;
+            } else {
+                messagesContainer.innerHTML = `
+                    <div style="text-align:center; color:#999; font-size:0.9rem; padding:1rem 0;">
+                        No messages yet. Start a conversation with the agent.
+                    </div>
+                `;
+            }
+            
+            // Show escalation info if there are messages
+            if (data.messages.length > 0 && data.messages.some(m => !m.escalated)) {
+                const hasUnescalated = data.messages.some(m => !m.escalated);
+                if (hasUnescalated && escalationInfo) {
+                    escalationInfo.style.display = 'block';
+                } else if (escalationInfo) {
+                    escalationInfo.style.display = 'none';
+                }
+            }
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    } catch (error) {
+        console.error('Error refreshing chat:', error);
+        messagesContainer.innerHTML = `
+            <div style="text-align:center; color:#EF4444; padding:1rem 0;">
+                ❌ Error loading messages
+            </div>
+        `;
+    }
+}
+
+// ============================================
+// REQUEST PROPERTY
+// ============================================
+async function requestProperty(propertyId) {
+    if (!confirm('Would you like to request this property? The agent will be notified.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/properties/request_property', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ property_id: propertyId })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('✅ ' + data.message, 'success');
+            closePropertyModal();
+        } else {
+            showToast('❌ ' + (data.detail || 'Failed to request property'), 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error: ' + error.message, 'error');
+    }
+}
+</script>
 {% endblock %}
