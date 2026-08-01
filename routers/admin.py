@@ -4003,14 +4003,17 @@ async def update_building(
                 content={"success": False, "detail": "Access denied"}
             )
         
+        # Get all data
+        data = db.get_data()
+        buildings = data.get("buildings", [])
+        
         # Find the building
-        buildings = db.get_collection("buildings")
         building = None
-        building_id_to_update = None
-        for b in buildings:
+        building_index = -1
+        for idx, b in enumerate(buildings):
             if b.get("_id") == building_id or b.get("id") == building_id:
                 building = b
-                building_id_to_update = b.get("_id") or b.get("id")
+                building_index = idx
                 break
         
         if not building:
@@ -4061,8 +4064,11 @@ async def update_building(
         
         building["updated_at"] = datetime.now().isoformat()
         
-        # Save to database using update_collection_item
-        success = db.update_collection_item("buildings", building_id_to_update, building)
+        # Update the building in the list
+        data["buildings"][building_index] = building
+        
+        # Save the entire data
+        success = db.update_data(data)
         
         if success:
             return JSONResponse({
@@ -4116,14 +4122,17 @@ async def update_property(
                 content={"success": False, "detail": "Access denied"}
             )
         
+        # Get all data
+        data = db.get_data()
+        properties = data.get("properties", [])
+        
         # Find the property
-        properties = db.get_collection("properties")
         property_item = None
-        property_id_to_update = None
-        for p in properties:
+        property_index = -1
+        for idx, p in enumerate(properties):
             if p.get("_id") == property_id or p.get("id") == property_id:
                 property_item = p
-                property_id_to_update = p.get("_id") or p.get("id")
+                property_index = idx
                 break
         
         if not property_item:
@@ -4160,7 +4169,7 @@ async def update_property(
         # Update building reference if changed
         if building_id and building_id != property_item.get("building_id"):
             # Find the new building
-            buildings = db.get_collection("buildings")
+            buildings = data.get("buildings", [])
             new_building = None
             for b in buildings:
                 if b.get("_id") == building_id or b.get("id") == building_id:
@@ -4191,8 +4200,11 @@ async def update_property(
         
         property_item["updated_at"] = datetime.now().isoformat()
         
-        # Save to database using update_collection_item
-        success = db.update_collection_item("properties", property_id_to_update, property_item)
+        # Update the property in the list
+        data["properties"][property_index] = property_item
+        
+        # Save the entire data
+        success = db.update_data(data)
         
         if success:
             return JSONResponse({
@@ -4213,7 +4225,7 @@ async def update_property(
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        )
+        ) 
     
 # ============================================
 # GET BUILDING DETAILS FOR EDIT
