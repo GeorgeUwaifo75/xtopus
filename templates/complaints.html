@@ -1,0 +1,904 @@
+{% extends "base.html" %}
+
+{% block title %}Complaints - Xtopus{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>📋 Complaints Management</h1>
+    
+    {% if user.user_category == "Tenant" and user.tenant_status == "active" %}
+    <!-- ============================================ -->
+    <!-- TENANT VIEW - Make Complaint & Track Status -->
+    <!-- ============================================ -->
+    
+    <!-- Make Complaint Form -->
+    <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
+        <h2 style="color:#8B5CF6;">✍️ Make a Complaint</h2>
+        <p>Report an issue or concern to your property manager.</p>
+        
+        <form id="makeComplaintForm" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+            <div>
+                <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Subject</label>
+                <input type="text" id="complaintSubject" placeholder="Brief subject of your complaint" class="form-control" required>
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Description</label>
+                <textarea id="complaintDescription" placeholder="Please describe your issue in detail..." class="form-control" rows="4" required></textarea>
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Assign to</label>
+                <select id="complaintAssignee" class="form-control" required>
+                    <option value="">-- Select Person --</option>
+                </select>
+                <small style="color:#666;">Choose who should handle this complaint (Agent, Administrator, or Sub-Administrator)</small>
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Priority</label>
+                <select id="complaintPriority" class="form-control">
+                    <option value="low">🟢 Low</option>
+                    <option value="medium" selected>🟡 Medium</option>
+                    <option value="high">🔴 High</option>
+                    <option value="emergency">🚨 Emergency</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="background:#8B5CF6;">📤 Submit Complaint</button>
+        </form>
+        <div id="complaintSubmitResult" style="margin-top:1rem;"></div>
+    </div>
+    
+    <!-- My Complaints List -->
+    <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
+        <h2>📋 My Complaints</h2>
+        <p>Track the status of your complaints.</p>
+        
+        <div id="tenantComplaintsList">
+            <div style="color:#8B5CF6;">⏳ Loading your complaints...</div>
+        </div>
+    </div>
+    
+    <!-- Complaint Resolution Confirmation (for pending completion) -->
+    <div id="resolutionModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:12px; max-width:500px; width:95%; padding:2rem; position:relative; animation:scaleIn 0.3s ease;">
+            <button onclick="closeResolutionModal()" style="position:absolute; top:1rem; right:1rem; background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+            <h3 style="color:#10B981; margin-top:0;">✅ Confirm Resolution</h3>
+            <p>The property manager has marked this complaint as completed.</p>
+            <div id="resolutionDetails" style="background:#f8f9fa; padding:1rem; border-radius:8px; margin:1rem 0;">
+                <div><strong>Subject:</strong> <span id="resSubject"></span></div>
+                <div><strong>Cost Implication:</strong> ₦<span id="resCost">0</span></div>
+                <div><strong>Manager's Note:</strong> <span id="resNote"></span></div>
+            </div>
+            <p style="font-size:0.9rem; color:#666;">Please confirm if this complaint has been satisfactorily resolved.</p>
+            <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button onclick="confirmResolution(true)" class="btn btn-primary" style="background:#10B981;">✅ Completed</button>
+                <button onclick="confirmResolution(false)" class="btn btn-primary" style="background:#EF4444;">❌ Not Completed</button>
+            </div>
+            <div id="resolutionResult" style="margin-top:1rem;"></div>
+        </div>
+    </div>
+    
+    {% elif user.user_category in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"] %}
+    <!-- ============================================ -->
+    <!-- ADMIN/AGENT VIEW - Manage Complaints -->
+    <!-- ============================================ -->
+    
+    <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
+        <h2>📋 Manage Complaints</h2>
+        <p>View and manage all complaints assigned to you.</p>
+        
+        <!-- Filter Controls -->
+        <div style="display:flex; gap:1rem; flex-wrap:wrap; margin:1rem 0;">
+            <div style="flex:1; min-width:150px;">
+                <select id="complaintStatusFilter" class="form-control" onchange="loadAdminComplaints()">
+                    <option value="all">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="not_resolved">Not Resolved</option>
+                </select>
+            </div>
+            <div style="flex:1; min-width:150px;">
+                <select id="complaintPriorityFilter" class="form-control" onchange="loadAdminComplaints()">
+                    <option value="all">All Priority</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="emergency">Emergency</option>
+                </select>
+            </div>
+            <button onclick="loadAdminComplaints()" class="btn btn-primary" style="background:#8B5CF6;">🔄 Refresh</button>
+        </div>
+        
+        <div id="adminComplaintsList">
+            <div style="color:#8B5CF6;">⏳ Loading complaints...</div>
+        </div>
+    </div>
+    
+    <!-- Complaint Detail Modal (Admin) -->
+    <div id="complaintDetailModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(4px);">
+        <div style="background:white; border-radius:12px; max-width:600px; width:95%; max-height:90vh; overflow-y:auto; padding:2rem; position:relative; animation:scaleIn 0.3s ease;">
+            <button onclick="document.getElementById('complaintDetailModal').style.display='none'" style="position:absolute; top:1rem; right:1rem; background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+            <div id="complaintDetailContent">
+                <div style="color:#8B5CF6;">⏳ Loading complaint details...</div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- Access Denied -->
+    <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); text-align:center; margin:2rem 0;">
+        <h2 style="color:#EF4444;">🚫 Access Denied</h2>
+        <p>You do not have permission to access this page.</p>
+        <a href="/dashboard" class="btn btn-primary">Return to Dashboard</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// ============================================
+// TOAST NOTIFICATION
+// ============================================
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    const colors = {
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B',
+        info: '#8B5CF6'
+    };
+    
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 99999;
+        border-left: 4px solid ${colors[type] || '#8B5CF6'};
+        max-width: 450px;
+        animation: slideIn 0.3s ease;
+        font-family: Arial, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    `;
+    
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+    
+    toast.innerHTML = `
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+            <span style="font-size:1.25rem;">${icons[type] || 'ℹ️'}</span>
+            <span style="white-space:pre-line;">${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" 
+                style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#9CA3AF; padding:0 0 0 1rem;">
+            ×
+        </button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+function showButtonSpinner(button) {
+    if (button) {
+        const originalText = button.textContent;
+        button.dataset.originalText = originalText;
+        button.innerHTML = '<span class="spinner-small"></span> Processing...';
+        button.classList.add('btn-loading');
+        button.disabled = true;
+    }
+}
+
+function hideButtonSpinner(button) {
+    if (button) {
+        button.innerHTML = button.dataset.originalText || 'Submit';
+        button.classList.remove('btn-loading');
+        button.disabled = false;
+    }
+}
+
+// ============================================
+// TENANT: LOAD ASSIGNEES FOR COMPLAINT
+// ============================================
+async function loadComplaintAssignees() {
+    const select = document.getElementById('complaintAssignee');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Loading...</option>';
+    
+    try {
+        const response = await fetch('/api/complaints/get_assignees');
+        const data = await response.json();
+        
+        if (data.success && data.assignees) {
+            select.innerHTML = '<option value="">-- Select Person --</option>';
+            data.assignees.forEach(person => {
+                const option = document.createElement('option');
+                option.value = person.user_id;
+                const roleIcon = {
+                    'Super Administrator': '👑',
+                    'Administrator': '👤',
+                    'Sub-Administrator': '👥',
+                    'Agent': '🤝'
+                };
+                option.textContent = `${roleIcon[person.user_category] || '👤'} ${person.name} (${person.user_category})`;
+                select.appendChild(option);
+            });
+        } else {
+            select.innerHTML = '<option value="">No assignees available</option>';
+        }
+    } catch (error) {
+        console.error('Error loading assignees:', error);
+        select.innerHTML = '<option value="">Error loading assignees</option>';
+    }
+}
+
+// ============================================
+// TENANT: SUBMIT COMPLAINT
+// ============================================
+document.getElementById('makeComplaintForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const subject = document.getElementById('complaintSubject').value.trim();
+    const description = document.getElementById('complaintDescription').value.trim();
+    const assignee = document.getElementById('complaintAssignee').value;
+    const priority = document.getElementById('complaintPriority').value;
+    
+    if (!subject || !description || !assignee) {
+        showToast('Please fill in all required fields', 'error');
+        return;
+    }
+    
+    const submitButton = this.querySelector('button[type="submit"]');
+    const resultDiv = document.getElementById('complaintSubmitResult');
+    
+    if (submitButton) showButtonSpinner(submitButton);
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Submitting complaint...</div>';
+    
+    try {
+        const response = await fetch('/api/complaints/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: subject,
+                description: description,
+                assignee_id: assignee,
+                priority: priority
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${data.message}</div>
+            `;
+            document.getElementById('complaintSubject').value = '';
+            document.getElementById('complaintDescription').value = '';
+            document.getElementById('complaintAssignee').value = '';
+            document.getElementById('complaintPriority').value = 'medium';
+            showToast('✅ Complaint submitted successfully!', 'success');
+            loadTenantComplaints();
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to submit complaint'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        if (submitButton) hideButtonSpinner(submitButton);
+    }
+});
+
+// ============================================
+// TENANT: LOAD MY COMPLAINTS
+// ============================================
+async function loadTenantComplaints() {
+    const container = document.getElementById('tenantComplaintsList');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="loading-placeholder">
+            <div class="spinner-mini"></div>
+            Loading complaints...
+        </div>
+    `;
+    
+    try {
+        const response = await fetch('/api/complaints/my');
+        const data = await response.json();
+        
+        if (data.success && data.complaints) {
+            if (data.complaints.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                        <p style="color:#666;">You haven't submitted any complaints yet.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '<div style="margin-top:0.5rem;">';
+            
+            data.complaints.forEach(complaint => {
+                const statusColors = {
+                    'pending': '#F59E0B',
+                    'in_progress': '#8B5CF6',
+                    'completed': '#3B82F6',
+                    'resolved': '#10B981',
+                    'not_resolved': '#EF4444'
+                };
+                const statusLabels = {
+                    'pending': '⏳ Pending',
+                    'in_progress': '🔄 In Progress',
+                    'completed': '✅ Completed (Awaiting Confirmation)',
+                    'resolved': '✅ Resolved',
+                    'not_resolved': '❌ Not Resolved'
+                };
+                const priorityLabels = {
+                    'low': '🟢 Low',
+                    'medium': '🟡 Medium',
+                    'high': '🔴 High',
+                    'emergency': '🚨 Emergency'
+                };
+                
+                const statusColor = statusColors[complaint.status] || '#999';
+                const statusLabel = statusLabels[complaint.status] || complaint.status;
+                const priorityLabel = priorityLabels[complaint.priority] || complaint.priority;
+                
+                html += `
+                    <div style="border:1px solid #eee; padding:1rem 1.5rem; border-radius:8px; margin-bottom:0.75rem; border-left:4px solid ${statusColor};">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;">
+                            <div>
+                                <strong style="color:#8B5CF6;">${complaint.subject}</strong>
+                                <br>
+                                <small style="color:#666;">${complaint.description.substring(0, 100)}${complaint.description.length > 100 ? '...' : ''}</small>
+                                <br>
+                                <small style="color:#999;">
+                                    Assigned to: ${complaint.assignee_name || complaint.assignee_id} | 
+                                    Submitted: ${new Date(complaint.created_at).toLocaleString()}
+                                </small>
+                            </div>
+                            <div style="text-align:right;">
+                                <span style="padding:0.25rem 0.75rem; border-radius:12px; font-size:0.8rem; background:${statusColor}20; color:${statusColor}; font-weight:500;">
+                                    ${statusLabel}
+                                </span>
+                                <br>
+                                <span style="font-size:0.7rem; color:#666;">${priorityLabel}</span>
+                                ${complaint.cost > 0 ? `<br><span style="font-size:0.8rem; color:#8B5CF6;">💰 Cost: ₦${complaint.cost}</span>` : ''}
+                            </div>
+                        </div>
+                        ${complaint.admin_comment ? `
+                            <div style="margin-top:0.5rem; background:#f0f0f0; padding:0.5rem; border-radius:4px; font-size:0.9rem;">
+                                <strong>📝 Manager's Note:</strong> ${complaint.admin_comment}
+                            </div>
+                        ` : ''}
+                        ${complaint.status === 'completed' && !complaint.resolved ? `
+                            <div style="margin-top:0.5rem;">
+                                <button onclick="showResolutionModal('${complaint._id}')" class="btn btn-primary" style="background:#10B981; font-size:0.85rem;">
+                                    ✅ Confirm Resolution
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `
+                <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                    <p style="color:#EF4444;">❌ ${data.detail || 'Failed to load complaints'}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading complaints:', error);
+        container.innerHTML = `
+            <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                <p style="color:#EF4444;">❌ Error loading complaints: ${error.message}</p>
+                <button onclick="loadTenantComplaints()" class="btn btn-primary" style="margin-top:0.5rem;">🔄 Retry</button>
+            </div>
+        `;
+    }
+}
+
+// ============================================
+// TENANT: SHOW RESOLUTION MODAL
+// ============================================
+let currentComplaintId = null;
+
+function showResolutionModal(complaintId) {
+    currentComplaintId = complaintId;
+    const modal = document.getElementById('resolutionModal');
+    
+    // Fetch complaint details
+    fetch(`/api/complaints/${complaintId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('resSubject').textContent = data.complaint.subject;
+                document.getElementById('resCost').textContent = data.complaint.cost || 0;
+                document.getElementById('resNote').textContent = data.complaint.admin_comment || 'No additional notes';
+                modal.style.display = 'flex';
+            } else {
+                showToast('❌ Failed to load complaint details', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading complaint:', error);
+            showToast('❌ Error: ' + error.message, 'error');
+        });
+}
+
+function closeResolutionModal() {
+    document.getElementById('resolutionModal').style.display = 'none';
+    currentComplaintId = null;
+}
+
+// ============================================
+// TENANT: CONFIRM RESOLUTION
+// ============================================
+async function confirmResolution(resolved) {
+    if (!currentComplaintId) {
+        showToast('❌ No complaint selected', 'error');
+        return;
+    }
+    
+    const resultDiv = document.getElementById('resolutionResult');
+    const buttons = document.querySelectorAll('#resolutionModal .btn-primary');
+    
+    buttons.forEach(btn => showButtonSpinner(btn));
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Processing...</div>';
+    
+    try {
+        const response = await fetch('/api/complaints/confirm_resolution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                complaint_id: currentComplaintId,
+                resolved: resolved
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${data.message}</div>
+            `;
+            showToast('✅ ' + data.message, 'success');
+            
+            setTimeout(() => {
+                closeResolutionModal();
+                loadTenantComplaints();
+            }, 1500);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to confirm resolution'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        buttons.forEach(btn => hideButtonSpinner(btn));
+    }
+}
+
+// ============================================
+// ADMIN: LOAD COMPLAINTS
+// ============================================
+async function loadAdminComplaints() {
+    const container = document.getElementById('adminComplaintsList');
+    if (!container) return;
+    
+    const statusFilter = document.getElementById('complaintStatusFilter')?.value || 'all';
+    const priorityFilter = document.getElementById('complaintPriorityFilter')?.value || 'all';
+    
+    container.innerHTML = `
+        <div class="loading-placeholder">
+            <div class="spinner-mini"></div>
+            Loading complaints...
+        </div>
+    `;
+    
+    try {
+        let url = '/api/complaints/assigned';
+        const params = new URLSearchParams();
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+        if (priorityFilter !== 'all') params.append('priority', priorityFilter);
+        if (params.toString()) url += '?' + params.toString();
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success && data.complaints) {
+            if (data.complaints.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                        <p style="color:#666;">No complaints match your filters.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '<div style="margin-top:0.5rem;">';
+            
+            data.complaints.forEach(complaint => {
+                const statusColors = {
+                    'pending': '#F59E0B',
+                    'in_progress': '#8B5CF6',
+                    'completed': '#3B82F6',
+                    'resolved': '#10B981',
+                    'not_resolved': '#EF4444'
+                };
+                const statusLabels = {
+                    'pending': '⏳ Pending',
+                    'in_progress': '🔄 In Progress',
+                    'completed': '✅ Completed',
+                    'resolved': '✅ Resolved',
+                    'not_resolved': '❌ Not Resolved'
+                };
+                const priorityLabels = {
+                    'low': '🟢 Low',
+                    'medium': '🟡 Medium',
+                    'high': '🔴 High',
+                    'emergency': '🚨 Emergency'
+                };
+                
+                const statusColor = statusColors[complaint.status] || '#999';
+                const statusLabel = statusLabels[complaint.status] || complaint.status;
+                const priorityLabel = priorityLabels[complaint.priority] || complaint.priority;
+                
+                // Show if tenant has confirmed resolution
+                let resolutionStatus = '';
+                if (complaint.status === 'completed' && !complaint.resolved) {
+                    resolutionStatus = '<span style="color:#F59E0B; font-size:0.8rem;">⏳ Awaiting tenant confirmation</span>';
+                } else if (complaint.resolved === true) {
+                    resolutionStatus = '<span style="color:#10B981; font-size:0.8rem;">✅ Tenant confirmed resolved</span>';
+                } else if (complaint.resolved === false) {
+                    resolutionStatus = '<span style="color:#EF4444; font-size:0.8rem;">❌ Tenant said not resolved</span>';
+                }
+                
+                html += `
+                    <div style="border:1px solid #eee; padding:1rem 1.5rem; border-radius:8px; margin-bottom:0.75rem; border-left:4px solid ${statusColor};">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;">
+                            <div>
+                                <strong style="color:#8B5CF6;">${complaint.subject}</strong>
+                                <br>
+                                <small style="color:#666;">
+                                    From: ${complaint.tenant_name || complaint.tenant_id} | 
+                                    Assigned to: ${complaint.assignee_name || complaint.assignee_id}
+                                </small>
+                                <br>
+                                <small style="color:#999;">
+                                    Submitted: ${new Date(complaint.created_at).toLocaleString()}
+                                    ${complaint.updated_at ? `| Updated: ${new Date(complaint.updated_at).toLocaleString()}` : ''}
+                                </small>
+                            </div>
+                            <div style="text-align:right;">
+                                <span style="padding:0.25rem 0.75rem; border-radius:12px; font-size:0.8rem; background:${statusColor}20; color:${statusColor}; font-weight:500;">
+                                    ${statusLabel}
+                                </span>
+                                <br>
+                                <span style="font-size:0.7rem; color:#666;">${priorityLabel}</span>
+                                ${resolutionStatus ? `<br>${resolutionStatus}` : ''}
+                                ${complaint.cost > 0 ? `<br><span style="font-size:0.8rem; color:#8B5CF6;">💰 Cost: ₦${complaint.cost}</span>` : ''}
+                            </div>
+                        </div>
+                        <div style="margin-top:0.5rem; color:#4B5563; font-size:0.9rem;">
+                            ${complaint.description.substring(0, 150)}${complaint.description.length > 150 ? '...' : ''}
+                        </div>
+                        <div style="margin-top:0.5rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                            <button onclick="showComplaintDetail('${complaint._id}')" class="btn-manage" style="padding:0.3rem 0.8rem; font-size:0.8rem;">
+                                👁️ View & Manage
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `
+                <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                    <p style="color:#EF4444;">❌ ${data.detail || 'Failed to load complaints'}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading complaints:', error);
+        container.innerHTML = `
+            <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
+                <p style="color:#EF4444;">❌ Error loading complaints: ${error.message}</p>
+                <button onclick="loadAdminComplaints()" class="btn btn-primary" style="margin-top:0.5rem;">🔄 Retry</button>
+            </div>
+        `;
+    }
+}
+
+// ============================================
+// ADMIN: SHOW COMPLAINT DETAIL
+// ============================================
+async function showComplaintDetail(complaintId) {
+    const modal = document.getElementById('complaintDetailModal');
+    const content = document.getElementById('complaintDetailContent');
+    
+    modal.style.display = 'flex';
+    content.innerHTML = `
+        <div style="text-align:center; padding:2rem; color:#8B5CF6;">
+            <div class="spinner-mini" style="display:inline-block;"></div>
+            <p>Loading complaint details...</p>
+        </div>
+    `;
+    
+    try {
+        const response = await fetch(`/api/complaints/${complaintId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const c = data.complaint;
+            const statusColors = {
+                'pending': '#F59E0B',
+                'in_progress': '#8B5CF6',
+                'completed': '#3B82F6',
+                'resolved': '#10B981',
+                'not_resolved': '#EF4444'
+            };
+            const statusLabels = {
+                'pending': '⏳ Pending',
+                'in_progress': '🔄 In Progress',
+                'completed': '✅ Completed',
+                'resolved': '✅ Resolved',
+                'not_resolved': '❌ Not Resolved'
+            };
+            const priorityLabels = {
+                'low': '🟢 Low',
+                'medium': '🟡 Medium',
+                'high': '🔴 High',
+                'emergency': '🚨 Emergency'
+            };
+            
+            let resolutionStatus = '';
+            if (c.status === 'completed' && !c.resolved) {
+                resolutionStatus = '<span style="color:#F59E0B;">⏳ Awaiting tenant confirmation</span>';
+            } else if (c.resolved === true) {
+                resolutionStatus = '<span style="color:#10B981;">✅ Tenant confirmed resolved</span>';
+            } else if (c.resolved === false) {
+                resolutionStatus = '<span style="color:#EF4444;">❌ Tenant said not resolved</span>';
+            }
+            
+            content.innerHTML = `
+                <h2 style="color:#8B5CF6; margin-top:0;">${c.subject}</h2>
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; background:#f8f9fa; padding:1rem; border-radius:8px; margin:1rem 0;">
+                    <div><strong>Tenant:</strong> ${c.tenant_name || c.tenant_id}</div>
+                    <div><strong>Assigned To:</strong> ${c.assignee_name || c.assignee_id}</div>
+                    <div><strong>Priority:</strong> ${priorityLabels[c.priority] || c.priority}</div>
+                    <div><strong>Status:</strong> <span style="color:${statusColors[c.status]}; font-weight:500;">${statusLabels[c.status] || c.status}</span></div>
+                    <div><strong>Cost:</strong> ₦${c.cost || 0}</div>
+                    <div><strong>Resolution Status:</strong> ${resolutionStatus || 'N/A'}</div>
+                    <div style="grid-column: span 2;"><strong>Submitted:</strong> ${new Date(c.created_at).toLocaleString()}</div>
+                    ${c.updated_at ? `<div style="grid-column: span 2;"><strong>Updated:</strong> ${new Date(c.updated_at).toLocaleString()}</div>` : ''}
+                </div>
+                
+                <div style="margin:1rem 0;">
+                    <h4>📝 Description</h4>
+                    <p style="background:#f8f9fa; padding:0.75rem; border-radius:8px; margin-top:0.25rem; line-height:1.6;">${c.description}</p>
+                </div>
+                
+                ${c.admin_comment ? `
+                    <div style="margin:1rem 0; background:#f0f0f0; padding:0.75rem; border-radius:8px;">
+                        <h4 style="margin:0 0 0.25rem 0;">📝 Manager's Note</h4>
+                        <p style="margin:0;">${c.admin_comment}</p>
+                    </div>
+                ` : ''}
+                
+                <!-- Admin Actions -->
+                <div style="margin-top:1rem; border-top:1px solid #eee; padding-top:1rem;">
+                    <h4>⚙️ Update Status</h4>
+                    <form id="updateComplaintForm" style="display:flex; flex-direction:column; gap:0.75rem;">
+                        <div>
+                            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Status</label>
+                            <select id="updateStatus" class="form-control">
+                                <option value="pending" ${c.status === 'pending' ? 'selected' : ''}>⏳ Pending</option>
+                                <option value="in_progress" ${c.status === 'in_progress' ? 'selected' : ''}>🔄 In Progress</option>
+                                <option value="completed" ${c.status === 'completed' ? 'selected' : ''}>✅ Completed</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Cost Implication (₦)</label>
+                            <input type="number" id="updateCost" class="form-control" value="${c.cost || 0}" min="0" step="100">
+                            <small style="color:#666;">Set to 0 if no cost. Amount > 0 will be recorded as an expense for P&L.</small>
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Comment / Note</label>
+                            <textarea id="updateComment" class="form-control" rows="3" placeholder="Add your notes or remarks...">${c.admin_comment || ''}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="background:#8B5CF6;">💾 Update Complaint</button>
+                    </form>
+                    <div id="updateComplaintResult" style="margin-top:0.5rem;"></div>
+                </div>
+                
+                <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+                    <button onclick="document.getElementById('complaintDetailModal').style.display='none'" class="btn btn-secondary">Close</button>
+                </div>
+            `;
+            
+            // Handle form submission
+            document.getElementById('updateComplaintForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                await updateComplaint(complaintId);
+            });
+            
+        } else {
+            content.innerHTML = `
+                <div style="text-align:center; padding:2rem;">
+                    <p style="color:#EF4444;">❌ ${data.detail || 'Complaint not found'}</p>
+                    <button onclick="document.getElementById('complaintDetailModal').style.display='none'" class="btn btn-secondary" style="margin-top:1rem;">Close</button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        content.innerHTML = `
+            <div style="text-align:center; padding:2rem;">
+                <p style="color:#EF4444;">❌ Error loading complaint: ${error.message}</p>
+                <button onclick="document.getElementById('complaintDetailModal').style.display='none'" class="btn btn-secondary" style="margin-top:1rem;">Close</button>
+            </div>
+        `;
+    }
+}
+
+// ============================================
+// ADMIN: UPDATE COMPLAINT
+// ============================================
+async function updateComplaint(complaintId) {
+    const status = document.getElementById('updateStatus').value;
+    const cost = parseFloat(document.getElementById('updateCost').value) || 0;
+    const comment = document.getElementById('updateComment').value.trim();
+    
+    const submitButton = document.querySelector('#updateComplaintForm button[type="submit"]');
+    const resultDiv = document.getElementById('updateComplaintResult');
+    
+    if (submitButton) showButtonSpinner(submitButton);
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Updating complaint...</div>';
+    
+    try {
+        const response = await fetch(`/api/complaints/${complaintId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: status,
+                cost: cost,
+                admin_comment: comment
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${data.message}</div>
+            `;
+            showToast('✅ Complaint updated successfully!', 'success');
+            
+            // Refresh the detail view
+            setTimeout(() => {
+                showComplaintDetail(complaintId);
+                loadAdminComplaints();
+            }, 1500);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to update complaint'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        if (submitButton) hideButtonSpinner(submitButton);
+    }
+}
+
+// ============================================
+// INITIALIZE PAGE
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    const userCategory = '{{ user.user_category }}';
+    const tenantStatus = '{{ user.tenant_status }}';
+    
+    if (userCategory === 'Tenant' && tenantStatus === 'active') {
+        loadComplaintAssignees();
+        loadTenantComplaints();
+    } else if (['Super Administrator', 'Administrator', 'Sub-Administrator', 'Agent'].includes(userCategory)) {
+        loadAdminComplaints();
+    }
+});
+
+// Close modal on outside click
+document.getElementById('resolutionModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeResolutionModal();
+});
+document.getElementById('complaintDetailModal')?.addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+
+// Add spinner styles if not present
+const style = document.createElement('style');
+style.textContent = `
+    .spinner-small {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #8B5CF6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-right: 0.5rem;
+    }
+    .btn-loading {
+        opacity: 0.7;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    .loading-placeholder {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+        color: #8B5CF6;
+    }
+    .loading-placeholder .spinner-mini {
+        width: 30px;
+        height: 30px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #8B5CF6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 1rem;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    @keyframes scaleIn {
+        from { transform: scale(0.8); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+    .alert { padding: 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; }
+    .alert-success { background: #D1FAE5; color: #065F46; }
+    .alert-error { background: #FEE2E2; color: #991B1B; }
+    .btn-manage {
+        background: #8B5CF6;
+        color: white;
+        border: none;
+        padding: 0.3rem 0.8rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        transition: background 0.2s;
+    }
+    .btn-manage:hover { background: #7C3AED; }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

@@ -549,6 +549,10 @@
                         <i class="fas fa-chevron-down chevron" id="coyInfoChevron"></i>
                     </a>
                     <div class="dropdown-menu" id="coyInfoDropdown">
+			<!-- ADD THIS: Make Complaint menu item for tenants -->
+        		{% if user and user.user_category == "Tenant" and user.tenant_status == "active" %}
+        		<a href="/complaints" class="dropdown-item"><i class="fas fa-exclamation-triangle"></i> Make Complaint</a>
+        		{% endif %}
                         <a href="#" class="dropdown-item" onclick="showHelp()"><i class="fas fa-question-circle"></i> Help</a>
                         <a href="#" class="dropdown-item" onclick="showAbout()"><i class="fas fa-info-circle"></i> About Us</a>
                         <a href="#" class="dropdown-item" onclick="showContact()"><i class="fas fa-envelope"></i> Contact Us</a>

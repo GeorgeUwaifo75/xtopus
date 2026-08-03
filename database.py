@@ -91,7 +91,10 @@ class Database:
             "agreements": [],
             "agents": [],
             "notifications": [],
-            "tenant_requests": []  # Add this
+            "tenant_requests": [],
+            "expenses": [],
+            
+            
         }
         
     def update_data(self, data: Dict[str, Any]) -> bool:

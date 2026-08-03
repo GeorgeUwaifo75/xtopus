@@ -307,6 +307,36 @@ async def dashboard(request: Request):
         }
     
     return templates.TemplateResponse(dashboard_template, context)
+# Add to main.py after the existing page routes
+
+@app.get("/complaints", response_class=HTMLResponse)
+async def complaints_page(request: Request):
+    """Complaints management page for tenants and admins"""
+    token = request.cookies.get("session_token")
+    if not token:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    from security import security
+    user_data = security.get_current_user(token)
+    if not user_data:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    # Get full user data
+    users = db.get_collection("users")
+    user = None
+    for u in users:
+        if u.get("user_id") == user_data.get("user_id"):
+            user = u
+            break
+    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    return templates.TemplateResponse("complaints.html", {
+        "request": request,
+        "user": user,
+        "session_token": token
+    })
 
 @app.get("/logout")
 async def logout():
