@@ -6,7 +6,10 @@
 <div class="container">
     <h1>📋 Complaints Management</h1>
     
-    {% if user.user_category == "Tenant" and user.tenant_status == "active" %}
+    {% set user_category = user.user_category|default('User') %}
+    {% set tenant_status = user.tenant_status|default('') %}
+    
+    {% if user_category == "Tenant" and tenant_status == "active" %}
     <!-- ============================================ -->
     <!-- TENANT VIEW - Make Complaint & Track Status -->
     <!-- ============================================ -->
@@ -76,10 +79,30 @@
         </div>
     </div>
     
-    {% elif user.user_category in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"] %}
+    {% elif user_category in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"] %}
     <!-- ============================================ -->
     <!-- ADMIN/AGENT VIEW - Manage Complaints -->
     <!-- ============================================ -->
+    
+    <!-- Stats Summary -->
+    <div id="complaintStats" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap:0.75rem; margin:1rem 0;">
+        <div class="stat-card" style="background:#f8f9fa; padding:1rem; border-radius:8px; text-align:center;">
+            <div class="stat-number" id="statTotal" style="font-size:1.5rem; color:#8B5CF6;">0</div>
+            <div class="stat-label" style="font-size:0.8rem; color:#666;">Total</div>
+        </div>
+        <div class="stat-card" style="background:#FEF3C7; padding:1rem; border-radius:8px; text-align:center;">
+            <div class="stat-number" id="statPending" style="font-size:1.5rem; color:#F59E0B;">0</div>
+            <div class="stat-label" style="font-size:0.8rem; color:#666;">Pending</div>
+        </div>
+        <div class="stat-card" style="background:#EDE9FE; padding:1rem; border-radius:8px; text-align:center;">
+            <div class="stat-number" id="statInProgress" style="font-size:1.5rem; color:#8B5CF6;">0</div>
+            <div class="stat-label" style="font-size:0.8rem; color:#666;">In Progress</div>
+        </div>
+        <div class="stat-card" style="background:#D1FAE5; padding:1rem; border-radius:8px; text-align:center;">
+            <div class="stat-number" id="statResolved" style="font-size:1.5rem; color:#10B981;">0</div>
+            <div class="stat-label" style="font-size:0.8rem; color:#666;">Resolved</div>
+        </div>
+    </div>
     
     <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
         <h2>📋 Manage Complaints</h2>
@@ -503,7 +526,7 @@ async function confirmResolution(resolved) {
 }
 
 // ============================================
-// ADMIN: LOAD COMPLAINTS
+// ADMIN: LOAD COMPLAINTS WITH STATS
 // ============================================
 async function loadAdminComplaints() {
     const container = document.getElementById('adminComplaintsList');
@@ -528,6 +551,9 @@ async function loadAdminComplaints() {
         
         const response = await fetch(url);
         const data = await response.json();
+        
+        // Load stats
+        loadComplaintStats();
         
         if (data.success && data.complaints) {
             if (data.complaints.length === 0) {
@@ -636,6 +662,25 @@ async function loadAdminComplaints() {
 }
 
 // ============================================
+// ADMIN: LOAD COMPLAINT STATS
+// ============================================
+async function loadComplaintStats() {
+    try {
+        const response = await fetch('/api/complaints/stats');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('statTotal').textContent = data.stats.total || 0;
+            document.getElementById('statPending').textContent = data.stats.pending || 0;
+            document.getElementById('statInProgress').textContent = data.stats.in_progress || 0;
+            document.getElementById('statResolved').textContent = data.stats.resolved || 0;
+        }
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+// ============================================
 // ADMIN: SHOW COMPLAINT DETAIL
 // ============================================
 async function showComplaintDetail(complaintId) {
@@ -723,6 +768,7 @@ async function showComplaintDetail(complaintId) {
                                 <option value="in_progress" ${c.status === 'in_progress' ? 'selected' : ''}>🔄 In Progress</option>
                                 <option value="completed" ${c.status === 'completed' ? 'selected' : ''}>✅ Completed</option>
                             </select>
+                            <small style="color:#666;">When set to "Completed", the tenant will be asked to confirm resolution.</small>
                         </div>
                         <div>
                             <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Cost Implication (₦)</label>
@@ -803,6 +849,7 @@ async function updateComplaint(complaintId) {
             setTimeout(() => {
                 showComplaintDetail(complaintId);
                 loadAdminComplaints();
+                loadComplaintStats();
             }, 1500);
         } else {
             resultDiv.innerHTML = `
@@ -822,8 +869,8 @@ async function updateComplaint(complaintId) {
 // INITIALIZE PAGE
 // ============================================
 document.addEventListener('DOMContentLoaded', function() {
-    const userCategory = '{{ user.user_category }}';
-    const tenantStatus = '{{ user.tenant_status }}';
+    const userCategory = '{{ user.user_category|default("User") }}';
+    const tenantStatus = '{{ user.tenant_status|default("") }}';
     
     if (userCategory === 'Tenant' && tenantStatus === 'active') {
         loadComplaintAssignees();
@@ -842,63 +889,77 @@ document.getElementById('complaintDetailModal')?.addEventListener('click', funct
 });
 
 // Add spinner styles if not present
-const style = document.createElement('style');
-style.textContent = `
-    .spinner-small {
-        display: inline-block;
-        width: 20px;
-        height: 20px;
-        border: 2px solid #f3f3f3;
-        border-top: 2px solid #8B5CF6;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        vertical-align: middle;
-        margin-right: 0.5rem;
-    }
-    .btn-loading {
-        opacity: 0.7;
-        cursor: not-allowed;
-        pointer-events: none;
-    }
-    .loading-placeholder {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 2rem;
-        color: #8B5CF6;
-    }
-    .loading-placeholder .spinner-mini {
-        width: 30px;
-        height: 30px;
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #8B5CF6;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        margin-right: 1rem;
-    }
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    @keyframes scaleIn {
-        from { transform: scale(0.8); opacity: 0; }
-        to { transform: scale(1); opacity: 1; }
-    }
-    .alert { padding: 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; }
-    .alert-success { background: #D1FAE5; color: #065F46; }
-    .alert-error { background: #FEE2E2; color: #991B1B; }
-    .btn-manage {
-        background: #8B5CF6;
-        color: white;
-        border: none;
-        padding: 0.3rem 0.8rem;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.8rem;
-        transition: background 0.2s;
-    }
-    .btn-manage:hover { background: #7C3AED; }
-`;
-document.head.appendChild(style);
+(function addStyles() {
+    if (document.getElementById('complaintStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'complaintStyles';
+    style.textContent = `
+        .spinner-small {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #8B5CF6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+        .btn-loading {
+            opacity: 0.7;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        .loading-placeholder {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            color: #8B5CF6;
+        }
+        .loading-placeholder .spinner-mini {
+            width: 30px;
+            height: 30px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #8B5CF6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .alert { padding: 1rem; border-radius: 0.5rem; margin-bottom: 0.5rem; }
+        .alert-success { background: #D1FAE5; color: #065F46; }
+        .alert-error { background: #FEE2E2; color: #991B1B; }
+        .btn-manage {
+            background: #8B5CF6;
+            color: white;
+            border: none;
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: background 0.2s;
+        }
+        .btn-manage:hover { background: #7C3AED; }
+        .stat-card {
+            transition: transform 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+    `;
+    document.head.appendChild(style);
+})();
 </script>
 {% endblock %}
