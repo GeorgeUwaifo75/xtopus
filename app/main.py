@@ -7,6 +7,11 @@ import os
 from pathlib import Path
 import logging
 
+# After importing routers, start the escalation checker
+from routers.complaints import start_escalation_checker
+
+# Start the escalation checker
+start_escalation_checker()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
