@@ -384,6 +384,37 @@ async function loadTenantComplaints() {
                 const statusLabel = statusLabels[complaint.status] || complaint.status;
                 const priorityLabel = priorityLabels[complaint.priority] || complaint.priority;
                 
+
+// Show if tenant has confirmed resolution
+                let resolutionStatus = '';
+                if (complaint.status === 'completed' && !complaint.resolved) {
+                    resolutionStatus = '<span style="color:#F59E0B; font-size:0.8rem;">⏳ Awaiting tenant confirmation</span>';
+                } else if (complaint.resolved === true) {
+                    resolutionStatus = '<span style="color:#10B981; font-size:0.8rem;">✅ Tenant confirmed resolved</span>';
+                } else if (complaint.resolved === false) {
+                    resolutionStatus = '<span style="color:#EF4444; font-size:0.8rem;">❌ Tenant said not resolved</span>';
+                }
+
+                // ============================================
+                // FIX: Define escalationIndicator HERE
+                // ============================================
+                let escalationIndicator = '';
+                if (complaint.escalated) {
+                    escalationIndicator = `<br><span style="display:inline-block; background:#EF4444; color:white; padding:0.1rem 0.5rem; border-radius:4px; font-size:0.6rem;">⚠️ Escalated (Level ${complaint.escalation_level || 0})</span>`;
+                }
+
+                // ============================================
+                // FIX: Also define escalationNotification for tenant view
+                // ============================================
+                let escalationNotification = '';
+                if (complaint.escalated) {
+                    escalationNotification = `
+                        <div style="margin-top:0.5rem; background:#FEE2E2; padding:0.5rem 0.75rem; border-radius:4px; border-left:4px solid #EF4444;">
+                            <small style="color:#991B1B;">⚠️ This complaint has been escalated to a higher authority (Level ${complaint.escalation_level || 0}).</small>
+                        </div>
+                    `;
+                }
+
                 html += `
                     <div style="border:1px solid #eee; padding:1rem 1.5rem; border-radius:8px; margin-bottom:0.75rem; border-left:4px solid ${statusColor};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;">
