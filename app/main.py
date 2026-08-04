@@ -298,6 +298,14 @@ async def dashboard(request: Request):
                     break
         # ----------------------------------------------
         
+        # Determine if user is a tenant (active or pending)
+        is_tenant = user.get("user_category") == "Tenant"
+        is_active_tenant = is_tenant and user.get("tenant_status") == "active"
+        
+        # Tenants should NOT see available properties
+        # Regular users and pending tenants can see available properties
+        show_available_properties = not is_tenant  # Hide for all tenants (active or pending)
+        
         dashboard_template = "dashboard.html"
         context = {
             "request": request,
@@ -307,10 +315,12 @@ async def dashboard(request: Request):
             "session_token": token,
             "notifications": user_notifications,
             "is_pending_tenant": is_pending_tenant,
-            "all_properties": available_properties[:10],
-            "assigned_property_name": assigned_property_name  # Now defined
+            "all_properties": available_properties[:10] if show_available_properties else [],
+            "assigned_property_name": assigned_property_name,
+            "show_available_properties": show_available_properties,  # Flag for template
+            "is_tenant": is_tenant,
+            "is_active_tenant": is_active_tenant
         }
-    
     return templates.TemplateResponse(dashboard_template, context)
 # Add to main.py after the existing page routes
 

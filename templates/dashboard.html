@@ -383,6 +383,7 @@
     
    
 
+{% if show_available_properties is defined and show_available_properties %}
 <!-- Available Properties with Pagination -->
 <div style="margin-top:2rem;">
     <h2 style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -403,6 +404,15 @@
         <button onclick="changePage('next')" id="nextPageBtn" class="btn btn-secondary" style="padding:0.5rem 1rem;">Next ▶</button>
     </div>
 </div>
+{% elif is_tenant is defined and is_tenant %}
+<!-- Tenant-specific message -->
+<div style="margin-top:2rem; background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+    <h2 style="color:#10B981;">🏠 Your Tenancy</h2>
+    <p style="color:#666;">You are currently a tenant at <strong>{{ assigned_property_name or 'your property' }}</strong>.</p>
+    <p style="color:#666;">Your rental period: {{ user.rental_start_date or 'N/A' }} to {{ user.rental_end_date or 'N/A' }}</p>
+    <p style="color:#999; font-size:0.9rem; margin-top:0.5rem;">Tenants cannot view or request other properties. Contact your property manager for any inquiries.</p>
+</div>
+{% endif %}
 
 
 <!-- Property Detail Modal -->
@@ -1776,8 +1786,26 @@ async function submitTenantRequest() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Dashboard loaded');
     
-    // Load properties with pagination
+    // Load properties with pagination - ONLY if not a tenant
+    {% if show_available_properties is defined and show_available_properties %}
     loadAvailablePropertiesWithPagination();
+    {% else %}
+    console.log('Properties hidden for tenant user');
+    // If tenant, show a message or hide the grid
+    const grid = document.getElementById('propertyGrid');
+    if (grid) {
+        grid.innerHTML = `
+            <div style="text-align:center; padding:2rem; background:white; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                <p style="color:#666;">As a tenant, you cannot view or request other properties.</p>
+                <p style="color:#999; font-size:0.9rem;">Contact your property manager for any inquiries.</p>
+            </div>
+        `;
+    }
+    const paginationControls = document.getElementById('paginationControls');
+    if (paginationControls) {
+        paginationControls.style.display = 'none';
+    }
+    {% endif %}
     
     // Load agreement details for tenant
     loadAgreementDetails();
