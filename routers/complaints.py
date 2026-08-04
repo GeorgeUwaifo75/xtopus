@@ -365,6 +365,53 @@ def get_user_hierarchy(current_user_id: str) -> dict:
         "is_agent": user_category == "Agent"
     }
 
+def is_complaint_visible_to_user(complaint: dict, user_id: str, user_hierarchy: dict = None) -> bool:
+    """
+    Check if a complaint is visible to a user based on hierarchy.
+    A complaint is visible if:
+    1. The user is the assignee
+    2. The user is a Super Admin or Admin (can see all)
+    3. The user is the parent/creator of the assignee (can see complaints assigned to their children)
+    4. The user is a child of the assignee (can see complaints assigned to their parent)
+    5. The user is the tenant who created the complaint
+    """
+    if user_hierarchy is None:
+        user_hierarchy = get_user_hierarchy(user_id)
+    
+    if "error" in user_hierarchy:
+        return False
+    
+    assignee_id = complaint.get("assignee_id")
+    tenant_id = complaint.get("tenant_id")
+    user_category = user_hierarchy.get("user_category", "User")
+    
+    # Super Administrators and Administrators can see all complaints
+    if user_category in ["Super Administrator", "Administrator"]:
+        return True
+    
+    # User can see complaints they created (as tenant)
+    if tenant_id == user_id:
+        return True
+    
+    # User can see complaints assigned to them
+    if assignee_id == user_id:
+        return True
+    
+    # Sub-Admin can see complaints assigned to their agents (children)
+    if user_category == "Sub-Administrator":
+        # Check if the assignee is a descendant (created by this sub-admin or their agents)
+        all_descendants = user_hierarchy.get("all_descendants", [])
+        if assignee_id in all_descendants:
+            return True
+    
+    # Agent can see complaints assigned to their parent
+    if user_category == "Agent":
+        parent_user = user_hierarchy.get("parent")
+        if parent_user and parent_user.get("user_id") == assignee_id:
+            return True
+    
+    return False
+
 # ============================================
 # GET ASSIGNEES FOR COMPLAINT DROPDOWN
 # ============================================
@@ -782,9 +829,6 @@ async def get_assigned_complaints(
             tenant_id = complaint.get("tenant_id")
             complaint_id = complaint.get("_id")
             
-            # Log each complaint for debugging
-            logger.info(f"Complaint {complaint_id}: assignee={assignee_id}, tenant={tenant_id}, status={complaint.get('status')}")
-            
             # Determine if this complaint is visible to the user
             is_visible = False
             reason = ""
@@ -794,7 +838,7 @@ async def get_assigned_complaints(
                 is_visible = True
                 reason = "admin"
             
-            # 2. User is the assignee
+            # 2. User is the assignee (MOST IMPORTANT for Agents)
             elif assignee_id == user_id:
                 is_visible = True
                 reason = "assignee"
@@ -806,17 +850,12 @@ async def get_assigned_complaints(
             
             # 4. Sub-Administrator can see complaints assigned to their agents (children)
             elif user_category == "Sub-Administrator":
-                # Get all descendants (agents and users created by this sub-admin)
                 user_hierarchy = get_user_hierarchy(user_id)
                 if "error" not in user_hierarchy:
                     all_descendants = user_hierarchy.get("all_descendants", [])
                     if assignee_id in all_descendants:
                         is_visible = True
                         reason = "sub_admin_descendant"
-                    # Also check if the assignee is this sub-admin's parent (created_by)
-                    elif user_hierarchy.get("created_by") == assignee_id:
-                        is_visible = True
-                        reason = "sub_admin_parent"
             
             # 5. Agent can see complaints assigned to their parent (created_by)
             elif user_category == "Agent":
@@ -828,10 +867,10 @@ async def get_assigned_complaints(
                         reason = "agent_parent"
             
             if is_visible:
-                logger.info(f"✅ Complaint {complaint_id} is visible to {user_id} ({reason})")
+                logger.info(f"✅ Complaint {complaint_id} is visible to {user_id} ({reason}) - assignee={assignee_id}")
                 visible_complaints.append(complaint)
             else:
-                logger.info(f"❌ Complaint {complaint_id} is NOT visible to {user_id}")
+                logger.info(f"❌ Complaint {complaint_id} is NOT visible to {user_id} - assignee={assignee_id}")
         
         logger.info(f"Visible complaints: {len(visible_complaints)}")
         
@@ -917,20 +956,28 @@ async def update_complaint(request: Request, complaint_id: str):
         # Super Admins and Admins can update any complaint
         if user_category in ["Super Administrator", "Administrator"]:
             pass  # Allowed
-        # User must be the assignee or a parent of the assignee
+        # User must be the assignee
         elif user_id != assignee_id:
-            # Check if user is a parent of the assignee
-            user_hierarchy = get_user_hierarchy(user_id)
-            if "error" not in user_hierarchy:
-                if assignee_id not in user_hierarchy.get("all_descendants", []):
+            # Check if user is a parent of the assignee (for Sub-Admins)
+            if user_category == "Sub-Administrator":
+                user_hierarchy = get_user_hierarchy(user_id)
+                if "error" not in user_hierarchy:
+                    if assignee_id in user_hierarchy.get("all_descendants", []):
+                        pass  # Allowed - Sub-Admin can update complaints assigned to their agents
+                    else:
+                        return JSONResponse(
+                            status_code=403,
+                            content={"success": False, "detail": "You can only update complaints assigned to you or your team"}
+                        )
+                else:
                     return JSONResponse(
                         status_code=403,
-                        content={"success": False, "detail": "You can only update complaints assigned to you or your team"}
+                        content={"success": False, "detail": "You don't have permission to update this complaint"}
                     )
             else:
                 return JSONResponse(
                     status_code=403,
-                    content={"success": False, "detail": "You don't have permission to update this complaint"}
+                    content={"success": False, "detail": "You can only update complaints assigned to you"}
                 )
         
         body = await request.json()
