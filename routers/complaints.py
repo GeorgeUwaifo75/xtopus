@@ -365,6 +365,8 @@ def get_user_hierarchy(current_user_id: str) -> dict:
         "is_agent": user_category == "Agent"
     }
 
+# In complaints.py, replace the is_complaint_visible_to_user function with this:
+
 def is_complaint_visible_to_user(complaint: dict, user_id: str, user_hierarchy: dict = None) -> bool:
     """
     Check if a complaint is visible to a user based on hierarchy.
@@ -373,6 +375,7 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str, user_hierarchy: 
     2. The user is a Super Admin or Admin (can see all)
     3. The user is the parent/creator of the assignee (can see complaints assigned to their children)
     4. The user is a child of the assignee (can see complaints assigned to their parent)
+    5. The user is the tenant who created the complaint
     """
     if user_hierarchy is None:
         user_hierarchy = get_user_hierarchy(user_id)
@@ -401,17 +404,29 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str, user_hierarchy: 
     
     # Sub-Admin can see complaints assigned to their agents (children)
     if user_category == "Sub-Administrator":
-        if assignee_id in user_hierarchy.get("all_descendants", []):
+        # Check if the assignee is a descendant (created by this sub-admin or their agents)
+        all_descendants = user_hierarchy.get("all_descendants", [])
+        if assignee_id in all_descendants:
             logger.info(f"Sub-Admin {user_id} can see complaint assigned to their agent {assignee_id}")
             return True
+        
+        # Also check if the assignee is the sub-admin themselves (they are the assignee)
+        # This is already covered by the assignee_id == user_id check above
     
-    # Agent can see complaints assigned to their Sub-Admin/Admin (parent)
+    # Agent can see complaints assigned to them (already covered above)
+    # Agents can also see complaints assigned to their parent (the sub-admin/admin who created them)
     if user_category == "Agent":
         # Check if the assignee is the parent of this agent
         parent_user = user_hierarchy.get("parent")
         if parent_user and parent_user.get("user_id") == assignee_id:
             logger.info(f"Agent {user_id} can see complaint assigned to their parent {assignee_id}")
             return True
+        
+        # Also, if the complaint is assigned to this agent's parent, they should see it
+        # This helps agents see complaints that were escalated to their admin
+    
+    # If the user is a Sub-Administrator, they can also see complaints assigned to them
+    # This is already covered by assignee_id == user_id
     
     return False
 
@@ -764,9 +779,8 @@ async def get_complaint(request: Request, complaint_id: str):
             content={"success": False, "detail": str(e)}
         )
 
-# ============================================
-# GET ASSIGNED COMPLAINTS (Admin/Agent) - FIXED
-# ============================================
+# In complaints.py, update the get_assigned_complaints function:
+
 @router.get("/assigned")
 async def get_assigned_complaints(
     request: Request,
@@ -803,10 +817,37 @@ async def get_assigned_complaints(
         
         logger.info(f"Checking visibility for user {user_id} ({user_category})")
         logger.info(f"Total complaints: {len(all_complaints)}")
+        logger.info(f"User hierarchy: created_by={user_hierarchy.get('created_by')}, descendants={user_hierarchy.get('all_descendants', [])}")
         
         for complaint in all_complaints:
+            assignee_id = complaint.get("assignee_id")
+            tenant_id = complaint.get("tenant_id")
+            
+            # Log each complaint for debugging
+            logger.info(f"Complaint: {complaint.get('_id')} - assignee={assignee_id}, tenant={tenant_id}, status={complaint.get('status')}")
+            
+            # For Agents: they should see complaints where they are the assignee
+            if user_category == "Agent" and assignee_id == user_id:
+                visible_complaints.append(complaint)
+                logger.info(f"Agent {user_id} is assignee for complaint {complaint.get('_id')}")
+                continue
+            
+            # For Sub-Administrators: they should see complaints where they are the assignee
+            # or where their agents are the assignee
+            if user_category == "Sub-Administrator":
+                if assignee_id == user_id:
+                    visible_complaints.append(complaint)
+                    logger.info(f"Sub-Admin {user_id} is assignee for complaint {complaint.get('_id')}")
+                    continue
+                if assignee_id in user_hierarchy.get("all_descendants", []):
+                    visible_complaints.append(complaint)
+                    logger.info(f"Sub-Admin {user_id} can see complaint assigned to agent {assignee_id}")
+                    continue
+            
+            # Use the enhanced visibility function for other cases
             if is_complaint_visible_to_user(complaint, user_id, user_hierarchy):
                 visible_complaints.append(complaint)
+                logger.info(f"Complaint {complaint.get('_id')} is visible to {user_id} via hierarchy")
         
         logger.info(f"Visible complaints: {len(visible_complaints)}")
         
@@ -847,7 +888,7 @@ async def get_assigned_complaints(
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
-
+    
 # ============================================
 # UPDATE COMPLAINT (Admin/Agent)
 # ============================================
