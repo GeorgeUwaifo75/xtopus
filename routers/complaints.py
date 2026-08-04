@@ -89,10 +89,6 @@ async def get_assignees(request: Request):
         users = db.get_collection("users")
         assignees = []
         
-        # Get the tenant's property to find their agent/admin
-        tenant_property_id = current_user.get("assigned_property_id")
-        tenant_building_id = current_user.get("assigned_building_id")
-        
         # Get the user who assigned this tenant (agent/sub-admin/admin)
         assigned_by = current_user.get("tenant_assigned_by")
         
@@ -100,11 +96,6 @@ async def get_assignees(request: Request):
             user_category = user.get("user_category", "")
             # Include Super Administrators, Administrators, Sub-Administrators, and Agents
             if user_category in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"]:
-                # If tenant has an assigned_by, prioritize that person
-                if assigned_by and user.get("user_id") == assigned_by:
-                    # Put the assigned_by person first (we'll handle ordering later)
-                    pass
-                
                 assignees.append({
                     "user_id": user.get("user_id"),
                     "name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user.get("user_id"),
@@ -347,7 +338,7 @@ async def get_complaint(request: Request, complaint_id: str):
         )
 
 # ============================================
-# GET ASSIGNED COMPLAINTS (Admin/Agent)
+# GET ASSIGNED COMPLAINTS (Admin/Agent) - FIXED
 # ============================================
 @router.get("/assigned")
 async def get_assigned_complaints(
@@ -372,30 +363,40 @@ async def get_assigned_complaints(
             )
         
         complaints = db.get_collection("complaints")
+        current_user_id = current_user.get("user_id")
+        
+        logger.info(f"Fetching complaints for user: {current_user_id}, role: {user_category}")
+        logger.info(f"Total complaints in database: {len(complaints)}")
         
         # Filter by assignee
         if user_category in ["Super Administrator", "Administrator"]:
             # Admins can see all complaints
             assigned_complaints = complaints
+            logger.info(f"Admin sees all {len(assigned_complaints)} complaints")
         else:
             # Agents and Sub-Admins can only see complaints assigned to them
-            assigned_complaints = [c for c in complaints if c.get("assignee_id") == current_user.get("user_id")]
+            assigned_complaints = [c for c in complaints if c.get("assignee_id") == current_user_id]
+            logger.info(f"Agent/SubAdmin sees {len(assigned_complaints)} complaints assigned to them")
+            
+            # Log complaints for debugging
+            for c in complaints:
+                logger.debug(f"Complaint {c.get('_id')}: assignee_id={c.get('assignee_id')}, subject={c.get('subject')}")
         
         # Apply status filter
         if status and status != "all":
             assigned_complaints = [c for c in assigned_complaints if c.get("status") == status]
+            logger.info(f"After status filter '{status}': {len(assigned_complaints)} complaints")
         
         # Apply priority filter
         if priority and priority != "all":
             assigned_complaints = [c for c in assigned_complaints if c.get("priority") == priority]
+            logger.info(f"After priority filter '{priority}': {len(assigned_complaints)} complaints")
         
         # Sort by priority (emergency first) and then by created_at
         priority_order = {"emergency": 0, "high": 1, "medium": 2, "low": 3}
         assigned_complaints.sort(key=lambda x: (
             priority_order.get(x.get("priority", "medium"), 2),
-            # Put pending and in_progress before completed
             0 if x.get("status") in ["pending", "in_progress"] else 1,
-            # Then by created_at descending
             x.get("created_at", "")
         ), reverse=False)
         
@@ -407,6 +408,8 @@ async def get_assigned_complaints(
         
     except Exception as e:
         logger.error(f"Error getting assigned complaints: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
@@ -449,7 +452,7 @@ async def update_complaint(request: Request, complaint_id: str):
                 content={"success": False, "detail": "Complaint not found"}
             )
         
-        # Check permission
+        # Check permission - user must be the assignee or an admin
         if user_category not in ["Super Administrator", "Administrator"]:
             if complaint.get("assignee_id") != current_user.get("user_id"):
                 return JSONResponse(
@@ -684,12 +687,13 @@ async def get_complaint_stats(request: Request):
             )
         
         complaints = db.get_collection("complaints")
+        current_user_id = current_user.get("user_id")
         
         # Filter by assignee if not admin
         if user_category in ["Super Administrator", "Administrator"]:
             all_complaints = complaints
         else:
-            all_complaints = [c for c in complaints if c.get("assignee_id") == current_user.get("user_id")]
+            all_complaints = [c for c in complaints if c.get("assignee_id") == current_user_id]
         
         stats = {
             "total": len(all_complaints),
@@ -707,6 +711,64 @@ async def get_complaint_stats(request: Request):
         
     except Exception as e:
         logger.error(f"Error getting complaint stats: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+# Add to complaints.py - DEBUG endpoint to check all complaints
+@router.get("/debug/all")
+async def debug_all_complaints(request: Request):
+    """DEBUG: Get all complaints with assignee info"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        # Only super admin can access this
+        if current_user.get("user_category") != "Super Administrator":
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        complaints = db.get_collection("complaints")
+        
+        # Add user info to each complaint
+        users = db.get_collection("users")
+        user_map = {}
+        for u in users:
+            user_map[u.get("user_id")] = {
+                "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id"),
+                "category": u.get("user_category", "Unknown")
+            }
+        
+        result = []
+        for c in complaints:
+            result.append({
+                "id": c.get("_id"),
+                "subject": c.get("subject"),
+                "tenant_id": c.get("tenant_id"),
+                "tenant_name": c.get("tenant_name"),
+                "assignee_id": c.get("assignee_id"),
+                "assignee_name": c.get("assignee_name"),
+                "assignee_info": user_map.get(c.get("assignee_id"), {}),
+                "status": c.get("status"),
+                "priority": c.get("priority"),
+                "created_at": c.get("created_at")
+            })
+        
+        return JSONResponse({
+            "success": True,
+            "total": len(result),
+            "complaints": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {e}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
