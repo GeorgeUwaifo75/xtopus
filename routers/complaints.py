@@ -77,61 +77,151 @@ def check_and_escalate_complaints():
                                             
                                             next_roles = next_level_roles.get(current_level, [])
                                             for role in next_roles:
+                                                # Find the appropriate user with this role
+                                                # For agents, find their parent Sub-Admin or Admin
                                                 for u in users:
                                                     if u.get("user_category") == role:
-                                                        if role == "Super Administrator":
-                                                            # Always allow Super Admin
-                                                            pass
-                                                        elif role == "Administrator":
-                                                            # Check if this admin is the one who created the property/agent
-                                                            pass
-                                                        # For simplicity, escalate to any user with the role
-                                                        # In production, you'd want to find the appropriate admin
-                                                        
-                                                        # Escalate
-                                                        new_assignee = u.get("user_id")
-                                                        new_assignee_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id")
-                                                        
-                                                        # Update complaint
-                                                        complaint["assignee_id"] = new_assignee
-                                                        complaint["assignee_name"] = new_assignee_name
-                                                        complaint["escalated"] = True
-                                                        complaint["escalation_level"] = current_level + 1
-                                                        complaint["escalated_at"] = datetime.now().isoformat()
-                                                        complaint["updated_at"] = datetime.now().isoformat()
-                                                        
-                                                        # Add escalation message
-                                                        if "escalation_history" not in complaint:
-                                                            complaint["escalation_history"] = []
-                                                        complaint["escalation_history"].append({
-                                                            "from": assignee_id,
-                                                            "to": new_assignee,
-                                                            "reason": f"Auto-escalated after 6 hours of no response",
-                                                            "timestamp": datetime.now().isoformat()
-                                                        })
-                                                        
-                                                        # Save to database
-                                                        data = db.get_data()
-                                                        for idx, c in enumerate(data.get("complaints", [])):
-                                                            if c.get("_id") == complaint.get("_id"):
-                                                                data["complaints"][idx] = complaint
-                                                                db.update_data(data)
+                                                        # Check if this user is above the current assignee
+                                                        # For Agent -> Sub-Admin, check if the Sub-Admin created the Agent
+                                                        # For Sub-Admin -> Admin, check if the Admin created the Sub-Admin
+                                                        if current_level == 0:  # Agent -> Sub-Admin/Admin
+                                                            # Check if this user created the agent
+                                                            if u.get("user_id") == assignee.get("created_by"):
+                                                                # Escalate to this user
+                                                                new_assignee = u.get("user_id")
+                                                                new_assignee_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id")
+                                                                
+                                                                # Update complaint
+                                                                complaint["assignee_id"] = new_assignee
+                                                                complaint["assignee_name"] = new_assignee_name
+                                                                complaint["escalated"] = True
+                                                                complaint["escalation_level"] = current_level + 1
+                                                                complaint["escalated_at"] = datetime.now().isoformat()
+                                                                complaint["updated_at"] = datetime.now().isoformat()
+                                                                
+                                                                # Add escalation message
+                                                                if "escalation_history" not in complaint:
+                                                                    complaint["escalation_history"] = []
+                                                                complaint["escalation_history"].append({
+                                                                    "from": assignee_id,
+                                                                    "to": new_assignee,
+                                                                    "reason": f"Auto-escalated after 6 hours of no response",
+                                                                    "timestamp": datetime.now().isoformat()
+                                                                })
+                                                                
+                                                                # Save to database
+                                                                data = db.get_data()
+                                                                for idx, c in enumerate(data.get("complaints", [])):
+                                                                    if c.get("_id") == complaint.get("_id"):
+                                                                        data["complaints"][idx] = complaint
+                                                                        db.update_data(data)
+                                                                        break
+                                                                
+                                                                # Notify the new assignee
+                                                                create_notification(
+                                                                    new_assignee,
+                                                                    "complaint_escalated",
+                                                                    f"⚠️ Complaint '{complaint.get('subject')}' has been escalated to you after 6 hours of no response.",
+                                                                    {
+                                                                        "complaint_id": complaint.get("_id"),
+                                                                        "subject": complaint.get("subject"),
+                                                                        "tenant_id": complaint.get("tenant_id")
+                                                                    }
+                                                                )
+                                                                
+                                                                logger.info(f"Complaint {complaint.get('_id')} escalated from {assignee_id} to {new_assignee}")
                                                                 break
-                                                        
-                                                        # Notify the new assignee
-                                                        create_notification(
-                                                            new_assignee,
-                                                            "complaint_escalated",
-                                                            f"⚠️ Complaint '{complaint.get('subject')}' has been escalated to you after 6 hours of no response.",
-                                                            {
-                                                                "complaint_id": complaint.get("_id"),
-                                                                "subject": complaint.get("subject"),
-                                                                "tenant_id": complaint.get("tenant_id")
-                                                            }
-                                                        )
-                                                        
-                                                        logger.info(f"Complaint {complaint.get('_id')} escalated from {assignee_id} to {new_assignee}")
-                                                        break
+                                                        elif current_level == 1:  # Sub-Admin -> Admin
+                                                            if u.get("user_id") == assignee.get("created_by"):
+                                                                # Escalate to this user
+                                                                new_assignee = u.get("user_id")
+                                                                new_assignee_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id")
+                                                                
+                                                                # Update complaint
+                                                                complaint["assignee_id"] = new_assignee
+                                                                complaint["assignee_name"] = new_assignee_name
+                                                                complaint["escalated"] = True
+                                                                complaint["escalation_level"] = current_level + 1
+                                                                complaint["escalated_at"] = datetime.now().isoformat()
+                                                                complaint["updated_at"] = datetime.now().isoformat()
+                                                                
+                                                                # Add escalation message
+                                                                if "escalation_history" not in complaint:
+                                                                    complaint["escalation_history"] = []
+                                                                complaint["escalation_history"].append({
+                                                                    "from": assignee_id,
+                                                                    "to": new_assignee,
+                                                                    "reason": f"Auto-escalated after 6 hours of no response",
+                                                                    "timestamp": datetime.now().isoformat()
+                                                                })
+                                                                
+                                                                # Save to database
+                                                                data = db.get_data()
+                                                                for idx, c in enumerate(data.get("complaints", [])):
+                                                                    if c.get("_id") == complaint.get("_id"):
+                                                                        data["complaints"][idx] = complaint
+                                                                        db.update_data(data)
+                                                                        break
+                                                                
+                                                                # Notify the new assignee
+                                                                create_notification(
+                                                                    new_assignee,
+                                                                    "complaint_escalated",
+                                                                    f"⚠️ Complaint '{complaint.get('subject')}' has been escalated to you after 6 hours of no response.",
+                                                                    {
+                                                                        "complaint_id": complaint.get("_id"),
+                                                                        "subject": complaint.get("subject"),
+                                                                        "tenant_id": complaint.get("tenant_id")
+                                                                    }
+                                                                )
+                                                                
+                                                                logger.info(f"Complaint {complaint.get('_id')} escalated from {assignee_id} to {new_assignee}")
+                                                                break
+                                                        elif current_level == 2:  # Admin -> Super Admin
+                                                            if u.get("user_category") == "Super Administrator":
+                                                                new_assignee = u.get("user_id")
+                                                                new_assignee_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id")
+                                                                
+                                                                # Update complaint
+                                                                complaint["assignee_id"] = new_assignee
+                                                                complaint["assignee_name"] = new_assignee_name
+                                                                complaint["escalated"] = True
+                                                                complaint["escalation_level"] = current_level + 1
+                                                                complaint["escalated_at"] = datetime.now().isoformat()
+                                                                complaint["updated_at"] = datetime.now().isoformat()
+                                                                
+                                                                # Add escalation message
+                                                                if "escalation_history" not in complaint:
+                                                                    complaint["escalation_history"] = []
+                                                                complaint["escalation_history"].append({
+                                                                    "from": assignee_id,
+                                                                    "to": new_assignee,
+                                                                    "reason": f"Auto-escalated after 6 hours of no response",
+                                                                    "timestamp": datetime.now().isoformat()
+                                                                })
+                                                                
+                                                                # Save to database
+                                                                data = db.get_data()
+                                                                for idx, c in enumerate(data.get("complaints", [])):
+                                                                    if c.get("_id") == complaint.get("_id"):
+                                                                        data["complaints"][idx] = complaint
+                                                                        db.update_data(data)
+                                                                        break
+                                                                
+                                                                # Notify the new assignee
+                                                                create_notification(
+                                                                    new_assignee,
+                                                                    "complaint_escalated",
+                                                                    f"⚠️ Complaint '{complaint.get('subject')}' has been escalated to you after 6 hours of no response.",
+                                                                    {
+                                                                        "complaint_id": complaint.get("_id"),
+                                                                        "subject": complaint.get("subject"),
+                                                                        "tenant_id": complaint.get("tenant_id")
+                                                                    }
+                                                                )
+                                                                
+                                                                logger.info(f"Complaint {complaint.get('_id')} escalated from {assignee_id} to {new_assignee}")
+                                                                break
                                             break
                                         else:
                                             # Already at highest level, mark as escalated
@@ -211,6 +301,120 @@ def record_expense(description: str, amount: float, category: str, complaint_id:
     logger.info(f"Expense recorded: {description} - ₦{amount}")
     return True
 
+def get_user_hierarchy(current_user_id: str) -> dict:
+    """
+    Get the hierarchy relationships for a user.
+    Returns a dict with:
+    - user_id: the current user
+    - user_category: the user's role
+    - created_by: who created this user (if any)
+    - created_users: list of users this user created
+    - children: list of user IDs under this user (direct and indirect)
+    - parent: the user who created this user (if any)
+    """
+    users = db.get_collection("users")
+    
+    # Find the current user
+    current_user = None
+    for u in users:
+        if u.get("user_id") == current_user_id:
+            current_user = u
+            break
+    
+    if not current_user:
+        return {"error": "User not found"}
+    
+    user_category = current_user.get("user_category", "User")
+    created_by = current_user.get("created_by")
+    
+    # Find all users created by this user (direct children)
+    created_users = []
+    for u in users:
+        if u.get("created_by") == current_user_id:
+            created_users.append(u.get("user_id"))
+    
+    # Find the parent user (who created this user)
+    parent_user = None
+    if created_by:
+        for u in users:
+            if u.get("user_id") == created_by:
+                parent_user = u
+                break
+    
+    # Get all users under this user (children, grandchildren, etc.)
+    def get_all_descendants(user_id):
+        descendants = []
+        for u in users:
+            if u.get("created_by") == user_id:
+                descendants.append(u.get("user_id"))
+                # Recursively get their children
+                descendants.extend(get_all_descendants(u.get("user_id")))
+        return descendants
+    
+    all_descendants = get_all_descendants(current_user_id)
+    
+    return {
+        "user_id": current_user_id,
+        "user_category": user_category,
+        "created_by": created_by,
+        "parent": parent_user,
+        "created_users": created_users,
+        "all_descendants": all_descendants,
+        "is_admin": user_category in ["Super Administrator", "Administrator"],
+        "is_sub_admin": user_category == "Sub-Administrator",
+        "is_agent": user_category == "Agent"
+    }
+
+def is_complaint_visible_to_user(complaint: dict, user_id: str, user_hierarchy: dict = None) -> bool:
+    """
+    Check if a complaint is visible to a user based on hierarchy.
+    A complaint is visible if:
+    1. The user is the assignee
+    2. The user is a Super Admin or Admin (can see all)
+    3. The user is the parent/creator of the assignee (can see complaints assigned to their children)
+    4. The user is a child of the assignee (can see complaints assigned to their parent)
+    """
+    if user_hierarchy is None:
+        user_hierarchy = get_user_hierarchy(user_id)
+    
+    if "error" in user_hierarchy:
+        return False
+    
+    assignee_id = complaint.get("assignee_id")
+    tenant_id = complaint.get("tenant_id")
+    user_category = user_hierarchy.get("user_category", "User")
+    
+    # Super Administrators and Administrators can see all complaints
+    if user_category in ["Super Administrator", "Administrator"]:
+        logger.info(f"Admin {user_id} can see all complaints")
+        return True
+    
+    # User can see complaints they created (as tenant)
+    if tenant_id == user_id:
+        logger.info(f"Tenant {user_id} can see their own complaint")
+        return True
+    
+    # User can see complaints assigned to them
+    if assignee_id == user_id:
+        logger.info(f"User {user_id} is the assignee")
+        return True
+    
+    # Sub-Admin can see complaints assigned to their agents (children)
+    if user_category == "Sub-Administrator":
+        if assignee_id in user_hierarchy.get("all_descendants", []):
+            logger.info(f"Sub-Admin {user_id} can see complaint assigned to their agent {assignee_id}")
+            return True
+    
+    # Agent can see complaints assigned to their Sub-Admin/Admin (parent)
+    if user_category == "Agent":
+        # Check if the assignee is the parent of this agent
+        parent_user = user_hierarchy.get("parent")
+        if parent_user and parent_user.get("user_id") == assignee_id:
+            logger.info(f"Agent {user_id} can see complaint assigned to their parent {assignee_id}")
+            return True
+    
+    return False
+
 # ============================================
 # GET ASSIGNEES FOR COMPLAINT DROPDOWN
 # ============================================
@@ -238,25 +442,70 @@ async def get_assignees(request: Request):
         # Get the user who assigned this tenant (agent/sub-admin/admin)
         assigned_by = current_user.get("tenant_assigned_by")
         
-        # Build a list of potential assignees with priority
+        # Get the tenant's assigned property to find the appropriate assignees
+        assigned_property_id = current_user.get("assigned_property_id")
+        property_creator = None
+        
+        if assigned_property_id:
+            properties = db.get_collection("properties")
+            for p in properties:
+                if p.get("_id") == assigned_property_id or p.get("id") == assigned_property_id:
+                    property_creator = p.get("created_by")
+                    break
+        
+        # Build a list of potential assignees
         # Order of authority: Agent (lowest) -> Sub-Administrator -> Administrator -> Super Administrator (highest)
         for user in users:
             user_category = user.get("user_category", "")
             if user_category in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"]:
-                # Get the tenant's property to find the appropriate assignee
-                assignees.append({
-                    "user_id": user.get("user_id"),
-                    "name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user.get("user_id"),
-                    "user_category": user_category,
-                    "email": user.get("email", ""),
-                    "priority": 0 if user.get("user_id") == assigned_by else (
-                        1 if user_category == "Agent" else (
-                            2 if user_category == "Sub-Administrator" else (
-                                3 if user_category == "Administrator" else 4
+                # Check if this user is relevant to the tenant
+                is_relevant = False
+                
+                # If the tenant was assigned by someone, that person should be an option
+                if assigned_by and user.get("user_id") == assigned_by:
+                    is_relevant = True
+                
+                # If the property creator is relevant
+                if property_creator and user.get("user_id") == property_creator:
+                    is_relevant = True
+                
+                # Super Admins and Admins are always relevant
+                if user_category in ["Super Administrator", "Administrator"]:
+                    is_relevant = True
+                
+                if is_relevant:
+                    assignees.append({
+                        "user_id": user.get("user_id"),
+                        "name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user.get("user_id"),
+                        "user_category": user_category,
+                        "email": user.get("email", ""),
+                        "priority": 0 if user.get("user_id") == assigned_by else (
+                            1 if user_category == "Agent" else (
+                                2 if user_category == "Sub-Administrator" else (
+                                    3 if user_category == "Administrator" else 4
+                                )
                             )
                         )
-                    )
-                })
+                    })
+        
+        # If no relevant assignees found, include all admins and agents
+        if not assignees:
+            for user in users:
+                user_category = user.get("user_category", "")
+                if user_category in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"]:
+                    assignees.append({
+                        "user_id": user.get("user_id"),
+                        "name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or user.get("user_id"),
+                        "user_category": user_category,
+                        "email": user.get("email", ""),
+                        "priority": 0 if user.get("user_id") == assigned_by else (
+                            1 if user_category == "Agent" else (
+                                2 if user_category == "Sub-Administrator" else (
+                                    3 if user_category == "Administrator" else 4
+                                )
+                            )
+                        )
+                    })
         
         # Sort by priority (assigned_by first, then Agent, Sub-Admin, Admin, Super Admin)
         assignees.sort(key=lambda x: x.get("priority", 5))
@@ -363,6 +612,34 @@ async def create_complaint(request: Request):
                 }
             )
             
+            # Also notify higher-level admins (if the assignee is not an admin)
+            assignee_category = assignee.get("user_category", "")
+            if assignee_category not in ["Super Administrator", "Administrator"]:
+                for u in users:
+                    if u.get("user_category") in ["Super Administrator", "Administrator"]:
+                        # Check if this admin is above the assignee in the hierarchy
+                        if assignee_category == "Agent":
+                            # Check if this admin created the agent's parent
+                            created_by = assignee.get("created_by")
+                            if created_by:
+                                parent_user = None
+                                for p in users:
+                                    if p.get("user_id") == created_by:
+                                        parent_user = p
+                                        break
+                                if parent_user and parent_user.get("user_category") == u.get("user_category"):
+                                    create_notification(
+                                        u.get("user_id"),
+                                        "complaint_notification",
+                                        f"📋 New complaint from {complaint['tenant_name']} assigned to {complaint['assignee_name']}: {subject}",
+                                        {
+                                            "complaint_id": complaint["_id"],
+                                            "subject": subject,
+                                            "tenant_id": current_user.get("user_id"),
+                                            "assignee_id": assignee_id
+                                        }
+                                    )
+            
             # Notify the tenant that complaint was submitted
             create_notification(
                 current_user.get("user_id"),
@@ -459,24 +736,21 @@ async def get_complaint(request: Request, complaint_id: str):
                 content={"success": False, "detail": "Complaint not found"}
             )
         
-        # Check permissions
+        # Check permissions using hierarchy
         user_id = current_user.get("user_id")
-        user_category = current_user.get("user_category", "")
+        user_hierarchy = get_user_hierarchy(user_id)
         
-        # Tenant can only view their own complaints
-        if user_category == "Tenant":
-            if complaint.get("tenant_id") != user_id:
-                return JSONResponse(
-                    status_code=403,
-                    content={"success": False, "detail": "You can only view your own complaints"}
-                )
-        # Others can view if they are the assignee or an admin
-        else:
-            if complaint.get("assignee_id") != user_id and user_category not in ["Super Administrator", "Administrator"]:
-                return JSONResponse(
-                    status_code=403,
-                    content={"success": False, "detail": "You don't have permission to view this complaint"}
-                )
+        if "error" in user_hierarchy:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        if not is_complaint_visible_to_user(complaint, user_id, user_hierarchy):
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "You don't have permission to view this complaint"}
+            )
         
         return JSONResponse({
             "success": True,
@@ -491,7 +765,7 @@ async def get_complaint(request: Request, complaint_id: str):
         )
 
 # ============================================
-# GET ASSIGNED COMPLAINTS (Admin/Agent)
+# GET ASSIGNED COMPLAINTS (Admin/Agent) - FIXED
 # ============================================
 @router.get("/assigned")
 async def get_assigned_complaints(
@@ -499,7 +773,7 @@ async def get_assigned_complaints(
     status: Optional[str] = None,
     priority: Optional[str] = None
 ):
-    """Get complaints assigned to the current user (for admins and agents)"""
+    """Get complaints visible to the current user based on hierarchy"""
     try:
         current_user = get_current_user(request)
         if not current_user:
@@ -515,44 +789,54 @@ async def get_assigned_complaints(
                 content={"success": False, "detail": "Access denied"}
             )
         
-        complaints = db.get_collection("complaints")
-        current_user_id = current_user.get("user_id")
+        user_id = current_user.get("user_id")
+        user_hierarchy = get_user_hierarchy(user_id)
         
-        logger.info(f"Fetching complaints for user: {current_user_id}, role: {user_category}")
+        if "error" in user_hierarchy:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to get user hierarchy"}
+            )
         
-        # Filter by assignee
-        if user_category in ["Super Administrator", "Administrator"]:
-            # Admins can see all complaints
-            assigned_complaints = complaints
-            logger.info(f"Admin sees all {len(assigned_complaints)} complaints")
-        else:
-            # Agents and Sub-Admins can only see complaints assigned to them
-            assigned_complaints = [c for c in complaints if c.get("assignee_id") == current_user_id]
-            logger.info(f"Agent/SubAdmin sees {len(assigned_complaints)} complaints assigned to them")
+        all_complaints = db.get_collection("complaints")
+        visible_complaints = []
+        
+        logger.info(f"Checking visibility for user {user_id} ({user_category})")
+        logger.info(f"Total complaints: {len(all_complaints)}")
+        
+        for complaint in all_complaints:
+            if is_complaint_visible_to_user(complaint, user_id, user_hierarchy):
+                visible_complaints.append(complaint)
+        
+        logger.info(f"Visible complaints: {len(visible_complaints)}")
         
         # Apply status filter
         if status and status != "all":
-            assigned_complaints = [c for c in assigned_complaints if c.get("status") == status]
-            logger.info(f"After status filter '{status}': {len(assigned_complaints)} complaints")
+            visible_complaints = [c for c in visible_complaints if c.get("status") == status]
+            logger.info(f"After status filter '{status}': {len(visible_complaints)}")
         
         # Apply priority filter
         if priority and priority != "all":
-            assigned_complaints = [c for c in assigned_complaints if c.get("priority") == priority]
-            logger.info(f"After priority filter '{priority}': {len(assigned_complaints)} complaints")
+            visible_complaints = [c for c in visible_complaints if c.get("priority") == priority]
+            logger.info(f"After priority filter '{priority}': {len(visible_complaints)}")
         
         # Sort by priority (emergency first) and then by created_at
         priority_order = {"emergency": 0, "high": 1, "medium": 2, "low": 3}
-        assigned_complaints.sort(key=lambda x: (
+        visible_complaints.sort(key=lambda x: (
             priority_order.get(x.get("priority", "medium"), 2),
-            # Put pending and in_progress before completed
             0 if x.get("status") in ["pending", "in_progress"] else 1,
             x.get("created_at", "")
         ), reverse=False)
         
         return JSONResponse({
             "success": True,
-            "complaints": assigned_complaints,
-            "count": len(assigned_complaints)
+            "complaints": visible_complaints,
+            "count": len(visible_complaints),
+            "user_hierarchy": {
+                "category": user_hierarchy.get("user_category"),
+                "created_by": user_hierarchy.get("created_by"),
+                "has_descendants": len(user_hierarchy.get("all_descendants", [])) > 0
+            }
         })
         
     except Exception as e:
@@ -601,12 +885,30 @@ async def update_complaint(request: Request, complaint_id: str):
                 content={"success": False, "detail": "Complaint not found"}
             )
         
-        # Check permission - user must be the assignee or an admin
-        if user_category not in ["Super Administrator", "Administrator"]:
-            if complaint.get("assignee_id") != current_user.get("user_id"):
+        # Check permission using hierarchy
+        user_id = current_user.get("user_id")
+        user_hierarchy = get_user_hierarchy(user_id)
+        
+        if "error" in user_hierarchy:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        if not is_complaint_visible_to_user(complaint, user_id, user_hierarchy):
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "You don't have permission to update this complaint"}
+            )
+        
+        # Check if user can update (must be assignee or above in hierarchy)
+        assignee_id = complaint.get("assignee_id")
+        if user_id != assignee_id and user_category not in ["Super Administrator", "Administrator"]:
+            # Check if user is a parent of the assignee
+            if assignee_id not in user_hierarchy.get("all_descendants", []):
                 return JSONResponse(
                     status_code=403,
-                    content={"success": False, "detail": "You can only update complaints assigned to you"}
+                    content={"success": False, "detail": "You can only update complaints assigned to you or your team"}
                 )
         
         body = await request.json()
@@ -826,7 +1128,7 @@ async def confirm_resolution(request: Request):
 # ============================================
 @router.get("/stats")
 async def get_complaint_stats(request: Request):
-    """Get complaint statistics for dashboard"""
+    """Get complaint statistics for dashboard based on hierarchy"""
     try:
         current_user = get_current_user(request)
         if not current_user:
@@ -842,23 +1144,30 @@ async def get_complaint_stats(request: Request):
                 content={"success": False, "detail": "Access denied"}
             )
         
-        complaints = db.get_collection("complaints")
-        current_user_id = current_user.get("user_id")
+        user_id = current_user.get("user_id")
+        user_hierarchy = get_user_hierarchy(user_id)
         
-        # Filter by assignee if not admin
-        if user_category in ["Super Administrator", "Administrator"]:
-            all_complaints = complaints
-        else:
-            all_complaints = [c for c in complaints if c.get("assignee_id") == current_user_id]
+        if "error" in user_hierarchy:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to get user hierarchy"}
+            )
+        
+        all_complaints = db.get_collection("complaints")
+        visible_complaints = []
+        
+        for complaint in all_complaints:
+            if is_complaint_visible_to_user(complaint, user_id, user_hierarchy):
+                visible_complaints.append(complaint)
         
         stats = {
-            "total": len(all_complaints),
-            "pending": len([c for c in all_complaints if c.get("status") == "pending"]),
-            "in_progress": len([c for c in all_complaints if c.get("status") == "in_progress"]),
-            "completed": len([c for c in all_complaints if c.get("status") == "completed"]),
-            "resolved": len([c for c in all_complaints if c.get("status") == "resolved"]),
-            "not_resolved": len([c for c in all_complaints if c.get("status") == "not_resolved"]),
-            "escalated": len([c for c in all_complaints if c.get("escalated") == True])
+            "total": len(visible_complaints),
+            "pending": len([c for c in visible_complaints if c.get("status") == "pending"]),
+            "in_progress": len([c for c in visible_complaints if c.get("status") == "in_progress"]),
+            "completed": len([c for c in visible_complaints if c.get("status") == "completed"]),
+            "resolved": len([c for c in visible_complaints if c.get("status") == "resolved"]),
+            "not_resolved": len([c for c in visible_complaints if c.get("status") == "not_resolved"]),
+            "escalated": len([c for c in visible_complaints if c.get("escalated") == True])
         }
         
         return JSONResponse({
@@ -902,7 +1211,8 @@ async def debug_all_complaints(request: Request):
         for u in users:
             user_map[u.get("user_id")] = {
                 "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id"),
-                "category": u.get("user_category", "Unknown")
+                "category": u.get("user_category", "Unknown"),
+                "created_by": u.get("created_by")
             }
         
         result = []
