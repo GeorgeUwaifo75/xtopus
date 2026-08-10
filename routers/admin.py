@@ -883,14 +883,14 @@ async def create_agent(request: Request):
             "last_name": last_name,
             "user_category": "Agent",
             "activity_status": "Active",
-            "payment_status": "paid",
+            "payment_status": "free",
             "created_by": current_user.get("user_id"),
             "created_by_name": f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get("user_id"),
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "profile_photo": None
         }
-        new_user["payment_status"] = current_user.get("payment_status", "free")  
+        #new_user["payment_status"] = current_user.get("payment_status", "free")  
         
         success = db.add_to_collection("users", new_user)
         
@@ -1022,7 +1022,7 @@ async def create_sub_admin(request: Request):
             "last_name": last_name,
             "user_category": user_category,  # "Administrator" or "Sub-Administrator"
             "activity_status": "Active",
-            "payment_status": "paid",
+            "payment_status": "free",
             "created_by": current_user.get("user_id"),
             "created_by_name": f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get("user_id"),
             "created_at": datetime.now().isoformat(),
@@ -1036,7 +1036,7 @@ async def create_sub_admin(request: Request):
             }
         }
         
-        new_user["payment_status"] = current_user.get("payment_status", "free")  
+        #new_user["payment_status"] = current_user.get("payment_status", "free")  
         
         success = db.add_to_collection("users", new_user)
         

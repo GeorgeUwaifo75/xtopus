@@ -1886,6 +1886,12 @@ async function loadPaymentStatus() {
             const usage = data.usage;
             const permissions = data.permissions;
             
+            // Get user category from template
+            const userCategory = '{{ user.user_category }}';
+            
+            // Show upgrade button for Administrators on free plan
+            const showUpgrade = isFree && ['Super Administrator', 'Administrator'].includes(userCategory);
+            
             let html = `
                 <div style="border:1px solid ${isFree ? '#F59E0B' : '#10B981'}; padding:1rem; border-radius:8px; background:${isFree ? '#FFFBEB' : '#F0FDF4'};">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -1897,7 +1903,7 @@ async function loadPaymentStatus() {
                                 ${data.message}
                             </p>
                         </div>
-                        ${isFree && '{{ user.user_category }}' in ['Super Administrator', 'Administrator'] ? `
+                        ${showUpgrade ? `
                             <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                                 <button onclick="showUpgradePrompt()" class="btn btn-primary" style="background:#8B5CF6;">
                                     ⬆️ Upgrade Plan
@@ -2512,4 +2518,28 @@ async function payRentWithPaystack() {
 }
 
 </style>
+{% endblock %}
+
+<!-- Add this at the bottom of dashboard.html before the closing content block -->
+{% if user.user_category in ["Super Administrator", "Administrator"] %}
+<script>
+// Load Paystack public key for administrators
+async function loadPaystackConfig() {
+    try {
+        const response = await fetch('/api/payments/get_paystack_public_key');
+        const data = await response.json();
+        if (data.success && data.public_key) {
+            window.paystackPublicKey = data.public_key;
+        }
+    } catch (error) {
+        console.error('Error loading Paystack config:', error);
+    }
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadPaystackConfig();
+});
+</script>
+{% endif %}
 {% endblock %}
