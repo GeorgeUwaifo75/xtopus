@@ -93,7 +93,8 @@ class Database:
             "notifications": [],
             "tenant_requests": [],
             "expenses": [],
-            
+            "chat_messages": [],  # Added
+            "transactions": []    # Added
             
         }
         
@@ -106,7 +107,8 @@ class Database:
             # Ensure all collections exist
             collections = ["users", "buildings", "properties", "tenants", 
              	           "payments", "complaints", "chats", "agreements", "agents", 
-             	           "notifications", "tenant_requests"]  # Add notifications and tenant_requests
+             	           "notifications", "tenant_requests", "expenses", 
+                           "chat_messages", "transactions"]  
 
             for col in collections:
                 if col not in data:

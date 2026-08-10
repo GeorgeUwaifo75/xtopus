@@ -600,6 +600,11 @@
                     <div class="dropdown-menu" id="moreDropdown">
                         <a href="#" class="dropdown-item" onclick="backupDatabase()"><i class="fas fa-database"></i> Backup DB Files</a>
                         <a href="#" class="dropdown-item" onclick="restoreDatabase()"><i class="fas fa-undo"></i> Restore DB Files</a>
+			<!-- NEW: Reset DB option -->
+        		<div class="dropdown-divider"></div>
+        		<a href="#" class="dropdown-item" onclick="resetDatabase()" style="color:#EF4444;">
+            		  <i class="fas fa-trash-alt" style="color:#EF4444;"></i> Reset DB
+        		</a>
                     </div>
                 </li>
                 {% endif %}
@@ -1607,6 +1612,71 @@ function exportReport(reportType) {
         const token = document.cookie.split('; ').find(row => row.startsWith('session_token='));
         return !!token;
     }
+
+
+// ============================================
+// RESET DATABASE (Super Admin only)
+// ============================================
+
+async function resetDatabase() {
+    // First confirmation
+    if (!confirm('⚠️ WARNING: This will DELETE ALL application data including:\n\n' +
+                 '• All users (except Super Admin)\n' +
+                 '• All buildings\n' +
+                 '• All properties\n' +
+                 '• All photos (from Firebase storage)\n' +
+                 '• All payments, complaints, agreements\n' +
+                 '• All chat messages and notifications\n\n' +
+                 'ONLY the Super Administrator account will remain.\n\n' +
+                 'Are you sure you want to continue?')) {
+        return;
+    }
+    
+    // Second confirmation with password
+    const password = prompt('Enter your Super Admin password to confirm database reset:');
+    if (password === null) return;
+    if (!password || password.trim() === '') {
+        showToast('❌ Password is required to reset the database.', 'error');
+        return;
+    }
+    
+    showSpinner('Resetting Database...', 'This will delete all application data. Please wait...');
+    
+    try {
+        const response = await fetch('/api/admin/reset_database', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password.trim() })
+        });
+        
+        const data = await response.json();
+        hideSpinner();
+        
+        if (data.success) {
+            showToast('✅ Database has been reset successfully! Only Super Admin account remains.', 'success');
+            // Redirect to home page after reset
+            setTimeout(function() {
+                window.location.href = '/';
+            }, 3000);
+        } else {
+            showToast('❌ Failed to reset database: ' + (data.detail || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        hideSpinner();
+        showToast('❌ Error resetting database: ' + error.message, 'error');
+    }
+    
+    // Close dropdown
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+        menu.classList.remove('show');
+        const parent = menu.closest('.dropdown');
+        if (parent) {
+            const chevron = parent.querySelector('.chevron');
+            if (chevron) chevron.classList.remove('open');
+        }
+    });
+}
+
     </script>
     {% block extra_js %}{% endblock %}
 </body>

@@ -5143,3 +5143,184 @@ async def get_properties_report(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )    
+    
+# ============================================
+# RESET DATABASE (Super Admin only)
+# ============================================
+@router.post("/reset_database")
+async def reset_database(request: Request):
+    """
+    Reset the entire database - Super Admin only.
+    Deletes all data except the Super Admin account.
+    Also attempts to clean up Firebase storage photos.
+    """
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        # Only Super Admin can reset
+        if current_user.get("user_category") != "Super Administrator":
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied. Only Super Administrators can reset the database."}
+            )
+        
+        body = await request.json()
+        password = body.get("password")
+        
+        if not password:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "detail": "Password is required to reset the database."}
+            )
+        
+        # Verify the Super Admin's password
+        from security import security
+        user_id = current_user.get("user_id")
+        
+        # Get the user from database to verify password
+        users = db.get_collection("users")
+        super_admin = None
+        for u in users:
+            if u.get("user_id") == user_id:
+                super_admin = u
+                break
+        
+        if not super_admin:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Super Admin user not found."}
+            )
+        
+        # Verify password
+        stored_password = super_admin.get("password")
+        if not stored_password or not security.verify_password(password, stored_password):
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Invalid password."}
+            )
+        
+        # Get current data
+        data = db.get_data()
+        
+        # Preserve the Super Admin user
+        super_admin_user = None
+        for u in data.get("users", []):
+            if u.get("user_category") == "Super Administrator" and u.get("user_id") == user_id:
+                super_admin_user = u
+                break
+        
+        if not super_admin_user:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Super Admin user not found in database."}
+            )
+        
+        # Clean up Firebase Storage photos if possible
+        try:
+            # Get all buildings and properties to collect photo URLs
+            buildings = data.get("buildings", [])
+            properties = data.get("properties", [])
+            
+            photo_urls = []
+            for b in buildings:
+                photos = b.get("photos", [])
+                if photos:
+                    photo_urls.extend(photos)
+            for p in properties:
+                photos = p.get("photos", [])
+                if photos:
+                    photo_urls.extend(photos)
+            
+            # Try to delete photos from Firebase
+            if photo_urls:
+                logger.info(f"Attempting to delete {len(photo_urls)} photos from Firebase storage...")
+                # Note: Firebase deletion requires knowing the file paths
+                # We'll attempt to delete them, but if it fails, we continue
+                try:
+                    bucket = storage.bucket()
+                    for url in photo_urls:
+                        try:
+                            # Extract blob name from URL
+                            # URL format: https://storage.googleapis.com/[bucket]/[blob-name]
+                            if url and "storage.googleapis.com" in url:
+                                parts = url.split("/")
+                                # Find the bucket name and blob path
+                                # This is a best-effort approach
+                                for i, part in enumerate(parts):
+                                    if "storage.googleapis.com" in part and i + 1 < len(parts):
+                                        # The next part is the bucket name, then blob path follows
+                                        blob_path = "/".join(parts[i+2:])
+                                        if blob_path:
+                                            blob = bucket.blob(blob_path)
+                                            if blob.exists():
+                                                blob.delete()
+                                                logger.info(f"Deleted photo: {blob_path}")
+                        except Exception as photo_error:
+                            logger.warning(f"Could not delete photo {url}: {photo_error}")
+                except Exception as firebase_error:
+                    logger.warning(f"Firebase cleanup error: {firebase_error}")
+        except Exception as cleanup_error:
+            logger.warning(f"Photo cleanup error (non-critical): {cleanup_error}")
+        
+        # Reset the data structure - only keep the Super Admin
+        reset_data = {
+            "users": [super_admin_user],
+            "buildings": [],
+            "properties": [],
+            "tenants": [],
+            "payments": [],
+            "complaints": [],
+            "chats": [],
+            "agreements": [],
+            "agents": [],
+            "notifications": [],
+            "tenant_requests": [],
+            "expenses": [],
+            "chat_messages": [],
+            "transactions": []
+        }
+        
+        # Add a reset log entry as a notification for the Super Admin
+        reset_notification = {
+            "_id": f"notif_reset_{int(datetime.now().timestamp())}",
+            "user_id": user_id,
+            "type": "db_reset",
+            "message": f"🗄️ Database was reset by {user_id} at {datetime.now().isoformat()}. All data has been cleared.",
+            "read": False,
+            "created_at": datetime.now().isoformat()
+        }
+        reset_data["notifications"].append(reset_notification)
+        
+        # Save the reset data
+        success = db.update_data(reset_data)
+        
+        if success:
+            logger.info(f"Database reset by Super Admin {user_id} at {datetime.now().isoformat()}")
+            
+            # Log the reset action
+            logger.info(f"Reset summary: {len(photo_urls)} photos removed, all data cleared except Super Admin")
+            
+            return JSONResponse({
+                "success": True,
+                "message": "Database has been reset successfully. All data has been cleared. Only Super Admin account remains.",
+                "photos_removed": len(photo_urls) if photo_urls else 0
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "detail": "Failed to reset database. Please try again."}
+            )
+        
+    except Exception as e:
+        logger.error(f"Error resetting database: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    
