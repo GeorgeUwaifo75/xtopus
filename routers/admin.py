@@ -3870,6 +3870,8 @@ Xtopus Team
 # ============================================
 # GET USER PAYMENT STATUS (For dashboard display)
 # ============================================
+# In admin.py, find the get_user_payment_status function and update:
+
 @router.get("/get_user_payment_status")
 async def get_user_payment_status(request: Request):
     """Get the current user's payment status and plan information"""
@@ -3882,6 +3884,7 @@ async def get_user_payment_status(request: Request):
             )
         
         payment_status = current_user.get("payment_status", "free")
+        user_category = current_user.get("user_category", "")
         
         # Count usage
         user_id = current_user.get("user_id")
@@ -3896,13 +3899,15 @@ async def get_user_payment_status(request: Request):
         
         # Determine if user is on free plan and has reached limits
         is_free = payment_status == "free"
-        can_create_building = not (is_free and buildings_count >= 1)
-        can_create_property = not (is_free and properties_count >= 1)
-        can_assign_tenant = not (is_free and tenants_count >= 1)
+        
+        # For Administrators on free plan, show upgrade option
+        # For Super Administrators on free plan, also show upgrade option
+        can_upgrade = is_free and user_category in ["Super Administrator", "Administrator"]
         
         return JSONResponse({
             "success": True,
             "payment_status": payment_status,
+            "user_category": user_category,  # Add this for debugging
             "usage": {
                 "buildings": buildings_count,
                 "properties": properties_count,
@@ -3912,9 +3917,10 @@ async def get_user_payment_status(request: Request):
                 "max_tenants": 1 if is_free else 999
             },
             "permissions": {
-                "can_create_building": can_create_building,
-                "can_create_property": can_create_property,
-                "can_assign_tenant": can_assign_tenant
+                "can_create_building": not (is_free and buildings_count >= 1),
+                "can_create_property": not (is_free and properties_count >= 1),
+                "can_assign_tenant": not (is_free and tenants_count >= 1),
+                "can_upgrade": can_upgrade  # Add this flag
             },
             "is_free": is_free,
             "message": "You are on the Free Plan. You can create 1 building, 1 property, and assign 1 tenant." if is_free else "You are on a Paid Plan with unlimited access."
@@ -3925,8 +3931,7 @@ async def get_user_payment_status(request: Request):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        )    
-
+        )
 
 # Add or update the upgrade_user_plan endpoint to use Paystack reference:
 

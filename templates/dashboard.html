@@ -1884,13 +1884,11 @@ async function loadPaymentStatus() {
         if (data.success) {
             const isFree = data.is_free;
             const usage = data.usage;
-            const permissions = data.permissions;
+            const permissions = data.permissions || {};
+            const userCategory = data.user_category || '';
             
-            // Get user category from template
-            const userCategory = '{{ user.user_category }}';
-            
-            // Show upgrade button for Administrators on free plan
-            const showUpgrade = isFree && ['Super Administrator', 'Administrator'].includes(userCategory);
+            // Check if user can upgrade (free plan and admin or super admin)
+            const canUpgrade = permissions.can_upgrade || (isFree && ['Super Administrator', 'Administrator'].includes(userCategory));
             
             let html = `
                 <div style="border:1px solid ${isFree ? '#F59E0B' : '#10B981'}; padding:1rem; border-radius:8px; background:${isFree ? '#FFFBEB' : '#F0FDF4'};">
@@ -1903,7 +1901,7 @@ async function loadPaymentStatus() {
                                 ${data.message}
                             </p>
                         </div>
-                        ${showUpgrade ? `
+                        ${canUpgrade ? `
                             <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                                 <button onclick="showUpgradePrompt()" class="btn btn-primary" style="background:#8B5CF6;">
                                     ⬆️ Upgrade Plan
@@ -1940,6 +1938,8 @@ async function loadPaymentStatus() {
                 </div>
             `;
             container.innerHTML = html;
+        } else {
+            container.innerHTML = '<p style="color:#EF4444;">Error loading plan information</p>';
         }
     } catch (error) {
         console.error('Error loading payment status:', error);
@@ -1972,6 +1972,13 @@ async function showUpgradePrompt() {
             return;
         }
         
+        // Check if user is Administrator
+        const userCategory = '{{ user.user_category }}';
+        if (!['Super Administrator', 'Administrator'].includes(userCategory)) {
+            showToast('Plan upgrades are only available for Administrators.', 'warning');
+            return;
+        }
+        
         let plansHtml = '';
         for (const [key, plan] of Object.entries(plans)) {
             if (key === 'free') continue;
@@ -1994,21 +2001,31 @@ async function showUpgradePrompt() {
             `;
         }
         
-        container.innerHTML += `
-            <div style="margin-top:1rem; padding:1rem; border:2px solid #8B5CF6; border-radius:8px; background:#f5f3ff;">
+        // Add a cancel button and show the plans
+        const upgradeHtml = `
+            <div style="margin-top:1rem; padding:1rem; border:2px solid #8B5CF6; border-radius:8px; background:#f5f3ff;" class="upgrade-prompt">
                 <h4 style="color:#8B5CF6;">⬆️ Upgrade Your Plan</h4>
                 <p>Choose a plan to unlock unlimited features:</p>
                 <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
                     ${plansHtml}
                 </div>
                 <div style="margin-top:1rem;">
-                    <button onclick="document.querySelector('#paymentStatusContainer .upgrade-prompt').remove()" class="btn btn-secondary">
+                    <button onclick="document.querySelector('.upgrade-prompt').remove()" class="btn btn-secondary">
                         Cancel
                     </button>
                 </div>
                 <div id="upgradeResult" style="margin-top:0.5rem;"></div>
             </div>
         `;
+        
+        // Append to container or show as modal
+        container.innerHTML += upgradeHtml;
+        
+        // Scroll to the upgrade section
+        const upgradeSection = container.querySelector('.upgrade-prompt');
+        if (upgradeSection) {
+            upgradeSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
     } catch (error) {
         console.error('Error loading plans:', error);
         showToast('❌ Error loading payment plans', 'error');
@@ -2405,15 +2422,30 @@ async function upgradePlanWithPaystack(planType) {
     }
     
     // Show loading state
-    const button = document.querySelector('.upgrade-plan-btn');
-    if (button) {
-        showButtonSpinner(button);
+    const buttons = document.querySelectorAll('.upgrade-plan-btn');
+    let targetButton = null;
+    buttons.forEach(btn => {
+        if (btn.textContent.includes('Choose')) {
+            targetButton = btn;
+        }
+    });
+    
+    if (targetButton) {
+        showButtonSpinner(targetButton);
     }
     
-    await initializePaystackPayment('plan_upgrade', amount, userEmail, {
-        payment_plan: planType,
-        plan_name: planNames[planType]
-    });
+    try {
+        await initializePaystackPayment('plan_upgrade', amount, userEmail, {
+            payment_plan: planType,
+            plan_name: planNames[planType]
+        });
+    } catch (error) {
+        console.error('Error upgrading plan:', error);
+        showToast('❌ Error: ' + error.message, 'error');
+        if (targetButton) {
+            hideButtonSpinner(targetButton);
+        }
+    }
 }
 
 // ============================================
