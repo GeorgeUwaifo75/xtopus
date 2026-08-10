@@ -890,7 +890,7 @@ async def create_agent(request: Request):
             "updated_at": datetime.now().isoformat(),
             "profile_photo": None
         }
-        #new_user["payment_status"] = current_user.get("payment_status", "free")  
+        #   new_user["payment_status"] = current_user.get("payment_status", "free")  
         
         success = db.add_to_collection("users", new_user)
         
