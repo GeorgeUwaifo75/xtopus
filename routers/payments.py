@@ -783,8 +783,8 @@ async def get_payment_plans(request: Request):
         payment_status = current_user.get("payment_status", "free")
         user_category = current_user.get("user_category", "")
         
-        # Only Administrators and Super Administrators can upgrade their plan
-        if user_category not in ["Super Administrator", "Administrator"]:
+        # Allow Super Administrators, Administrators, and Sub-Administrators to upgrade
+        if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator"]:
             return JSONResponse({
                 "success": True,
                 "plans": {},

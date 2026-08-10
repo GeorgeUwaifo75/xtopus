@@ -3900,14 +3900,14 @@ async def get_user_payment_status(request: Request):
         # Determine if user is on free plan and has reached limits
         is_free = payment_status == "free"
         
-        # For Administrators on free plan, show upgrade option
-        # For Super Administrators on free plan, also show upgrade option
-        can_upgrade = is_free and user_category in ["Super Administrator", "Administrator"]
+        # For Administrators and Sub-Administrators on free plan, show upgrade option
+        # Super Administrators on free plan should also be able to upgrade
+        can_upgrade = is_free and user_category in ["Super Administrator", "Administrator", "Sub-Administrator"]
         
         return JSONResponse({
             "success": True,
             "payment_status": payment_status,
-            "user_category": user_category,  # Add this for debugging
+            "user_category": user_category,
             "usage": {
                 "buildings": buildings_count,
                 "properties": properties_count,
@@ -3920,7 +3920,7 @@ async def get_user_payment_status(request: Request):
                 "can_create_building": not (is_free and buildings_count >= 1),
                 "can_create_property": not (is_free and properties_count >= 1),
                 "can_assign_tenant": not (is_free and tenants_count >= 1),
-                "can_upgrade": can_upgrade  # Add this flag
+                "can_upgrade": can_upgrade
             },
             "is_free": is_free,
             "message": "You are on the Free Plan. You can create 1 building, 1 property, and assign 1 tenant." if is_free else "You are on a Paid Plan with unlimited access."
@@ -3932,7 +3932,105 @@ async def get_user_payment_status(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
+# In payments.py or in the payments router section:
 
+@router.get("/get_payment_plans")
+async def get_payment_plans(request: Request):
+    """Get available payment plans for upgrade"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        # Only show upgrade plans to users on free plan
+        payment_status = current_user.get("payment_status", "free")
+        user_category = current_user.get("user_category", "")
+        
+        # Allow Super Administrators, Administrators, and Sub-Administrators to upgrade
+        if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator"]:
+            return JSONResponse({
+                "success": True,
+                "plans": {},
+                "current_plan": "free",
+                "is_paid": False,
+                "message": "Plan upgrades are only available for Administrators and Sub-Administrators."
+            })
+        
+        plans = {
+            "free": {
+                "name": "Free Plan",
+                "price": 0,
+                "price_display": "Free",
+                "features": [
+                    "1 Building",
+                    "1 Property",
+                    "1 Tenant",
+                    "Basic Support"
+                ],
+                "is_free": True
+            },
+            "monthly": {
+                "name": "Monthly Plan",
+                "price": 15000,
+                "price_display": "₦15,000/month",
+                "features": [
+                    "Unlimited Buildings",
+                    "Unlimited Properties",
+                    "Unlimited Tenants",
+                    "Priority Support",
+                    "Monthly Billing"
+                ],
+                "is_free": False
+            },
+            "annual": {
+                "name": "Annual Plan",
+                "price": 162000,
+                "price_display": "₦162,000/year",
+                "features": [
+                    "Unlimited Buildings",
+                    "Unlimited Properties",
+                    "Unlimited Tenants",
+                    "Priority Support",
+                    "Annual Billing",
+                    "2 Months Free"
+                ],
+                "is_free": False,
+                "savings": "Save ₦18,000 (2 months free)"
+            }
+        }
+        
+        # Only show plans that the user can purchase
+        if payment_status != "free":
+            # Paid users see their current plan only
+            current_plan = current_user.get("plan_type", "monthly")
+            return JSONResponse({
+                "success": True,
+                "plans": {
+                    current_plan: plans.get(current_plan, plans["monthly"])
+                },
+                "current_plan": current_plan,
+                "is_paid": True
+            })
+        
+        return JSONResponse({
+            "success": True,
+            "plans": {
+                "monthly": plans["monthly"],
+                "annual": plans["annual"]
+            },
+            "current_plan": "free",
+            "is_paid": False
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting payment plans: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    
 # Add or update the upgrade_user_plan endpoint to use Paystack reference:
 
 @router.post("/upgrade_user_plan")

@@ -1887,8 +1887,9 @@ async function loadPaymentStatus() {
             const permissions = data.permissions || {};
             const userCategory = data.user_category || '';
             
-            // Check if user can upgrade (free plan and admin or super admin)
-            const canUpgrade = permissions.can_upgrade || (isFree && ['Super Administrator', 'Administrator'].includes(userCategory));
+            // Check if user can upgrade (free plan and admin, super admin, or sub-admin)
+            // Sub-admins should also be able to upgrade their plan
+            const canUpgrade = permissions.can_upgrade || (isFree && ['Super Administrator', 'Administrator', 'Sub-Administrator'].includes(userCategory));
             
             let html = `
                 <div style="border:1px solid ${isFree ? '#F59E0B' : '#10B981'}; padding:1rem; border-radius:8px; background:${isFree ? '#FFFBEB' : '#F0FDF4'};">
@@ -1972,10 +1973,10 @@ async function showUpgradePrompt() {
             return;
         }
         
-        // Check if user is Administrator
+        // Check if user is Administrator or Sub-Administrator
         const userCategory = '{{ user.user_category }}';
-        if (!['Super Administrator', 'Administrator'].includes(userCategory)) {
-            showToast('Plan upgrades are only available for Administrators.', 'warning');
+        if (!['Super Administrator', 'Administrator', 'Sub-Administrator'].includes(userCategory)) {
+            showToast('Plan upgrades are only available for Administrators and Sub-Administrators.', 'warning');
             return;
         }
         
