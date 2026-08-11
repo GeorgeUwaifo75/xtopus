@@ -163,7 +163,7 @@ async def dashboard(request: Request):
     if not user:
         return RedirectResponse(url="/login", status_code=303)
     
-    #user_category = user.get("user_category", "Tenant")
+    # --- FIX: Define user_category HERE before using it ---
     user_category = user.get("user_category", "User")
     
     # Get data for dashboard
@@ -189,12 +189,20 @@ async def dashboard(request: Request):
     user_notifications = [n for n in notifications if n.get("user_id") == user.get("user_id") and not n.get("read", False)]
     user_notifications = user_notifications[-5:]  # Get the 5 most recent
     
+    # Initialize template and context
+    dashboard_template = "dashboard.html"
+    context = {
+        "request": request,
+        "user": user,
+        "user_email": user.get("email"),
+        "session_token": token,
+        "notifications": user_notifications,
+    }
+    
     # Filter data based on user role
     if user_category == "Super Administrator":
         dashboard_template = "admin.html"
-        context = {
-            "request": request,
-            "user": user,
+        context.update({
             "buildings": buildings,
             "properties": all_properties,
             "tenants": [t for t in tenants if t.get("user_category") == "Tenant" and t.get("tenant_status") == "active"],
@@ -202,13 +210,11 @@ async def dashboard(request: Request):
             "pending_payments": [p for p in payments if p.get("status") == "pending"],
             "escalated_complaints": [c for c in complaints if c.get("status") == "escalated"],
             "pending_chats": len([c for c in chats if not c.get("read", False)]),
-            "user_email": user.get("email"),
-            "session_token": token,
-            "notifications": user_notifications,
             "admins": [u for u in tenants if u.get("user_category") == "Administrator"],
             "agents": [u for u in tenants if u.get("user_category") == "Agent"],
             "sub_admins": [u for u in tenants if u.get("user_category") == "Sub-Administrator"]
-        }
+        })
+        
     elif user_category == "Administrator":
         user_id = user.get("user_id")
         admin_buildings = [b for b in buildings if b.get("created_by") == user_id]
@@ -216,19 +222,13 @@ async def dashboard(request: Request):
         admin_properties = [p for p in all_properties if p.get("building_id") in building_ids]
         
         dashboard_template = "admin.html"
-        context = {
-            "request": request,
-            "user": user,
+        context.update({
             "buildings": admin_buildings,
             "properties": admin_properties,
             "tenants": [t for t in tenants if t.get("user_category") == "Tenant" and t.get("tenant_status") == "active"],
             "pending_tenants": pending_tenants,
-            "user_email": user.get("email"),
-            "session_token": token,
-            "notifications": user_notifications
-        }
-    # In the dashboard function, update the Sub-Administrator section:
-    # In the dashboard function, update the Sub-Administrator section:
+        })
+        
     elif user_category == "Sub-Administrator":
         # Get permissions for this sub-admin
         permissions = user.get("permissions", {})
@@ -244,14 +244,9 @@ async def dashboard(request: Request):
         available_properties = [p for p in all_properties if p.get("available", True)]
         
         dashboard_template = "dashboard.html"
-        context = {
-            "request": request,
-            "user": user,
+        context.update({
             "properties": all_properties,
             "all_properties": available_properties,  # Use available properties for display
-            "user_email": user.get("email"),
-            "session_token": token,
-            "notifications": user_notifications,
             "can_assign_tenant": can_assign_tenant,
             # Add permissions to context
             "permissions": {
@@ -260,27 +255,18 @@ async def dashboard(request: Request):
                 "can_create_properties": can_create_properties,
                 "can_manage_tenants": can_manage_tenants
             }
-        }  
-
-# In the dashboard function, make sure all_properties is passed to all user types
-# Update the context for each user role to include all_properties with pagination
-
-# For Agent:
+        })
+        
     elif user_category == "Agent":
         user_id = user.get("user_id")
         agent_properties = [p for p in all_properties if p.get("created_by") == user_id]
         
         dashboard_template = "dashboard.html"
-        context = {
-            "request": request,
-            "user": user,
+        context.update({
             "properties": agent_properties,
-            "all_properties": available_properties,  # Add this
-            "user_email": user.get("email"),
-            "session_token": token,
-            "notifications": user_notifications,
+            "all_properties": available_properties,
             "can_assign_tenant": True
-        }
+        })
     
     else:  # Tenant or regular user
         user_id = user.get("user_id")
@@ -308,32 +294,17 @@ async def dashboard(request: Request):
         show_available_properties = not is_tenant  # Hide for all tenants (active or pending)
         
         dashboard_template = "dashboard.html"
-        context = {
-            "request": request,
-            "user": user,
+        context.update({
             "properties": tenant_properties,
-            "user_email": user.get("email"),
-            "session_token": token,
-            "notifications": user_notifications,
             "is_pending_tenant": is_pending_tenant,
             "all_properties": available_properties[:10] if show_available_properties else [],
             "assigned_property_name": assigned_property_name,
             "show_available_properties": show_available_properties,  # Flag for template
             "is_tenant": is_tenant,
             "is_active_tenant": is_active_tenant
-        }
-        
-        # # For the JavaScript in templates, also pass user data as JSON
-        # context["user_json"] = json.dumps({
-        #     "user_id": user.get("user_id", ""),
-        #     "user_category": user.get("user_category", "User"),
-        #     "payment_status": user.get("payment_status", "free"),
-        #     "email": user.get("email", "")
-        # })    
-        
-        
-    return templates.TemplateResponse(dashboard_template, context)
-# Add to main.py after the existing page routes
+        })
+    
+    return templates.TemplateResponse(dashboard_template, context)# Add to main.py after the existing page routes
 
 @app.get("/complaints", response_class=HTMLResponse)
 async def complaints_page(request: Request):
