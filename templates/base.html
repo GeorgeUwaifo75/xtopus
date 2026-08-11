@@ -598,6 +598,9 @@
                         <i class="fas fa-chevron-down chevron" id="moreChevron"></i>
                     </a>
                     <div class="dropdown-menu" id="moreDropdown">
+                        <a href="#" class="dropdown-item" onclick="showSuperAdminUpgrade()" style="color:#10B981;">
+                         <i class="fas fa-arrow-up" style="color:#10B981;"></i> Upgrade User
+                        </a>
                         <a href="#" class="dropdown-item" onclick="backupDatabase()"><i class="fas fa-database"></i> Backup DB Files</a>
                         <a href="#" class="dropdown-item" onclick="restoreDatabase()"><i class="fas fa-undo"></i> Restore DB Files</a>
 			<!-- NEW: Reset DB option -->
@@ -1679,6 +1682,161 @@ async function resetDatabase() {
     });
 }
 
+
+// ============================================
+// SUPER ADMIN UPGRADE MODULE
+// ============================================
+
+async function showSuperAdminUpgrade() {
+    // Create modal for Super Admin upgrade
+    let modal = document.getElementById('superAdminUpgradeModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'superAdminUpgradeModal';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 99999;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    // Load users with free status
+    modal.innerHTML = `
+        <div style="background:white; border-radius:12px; max-width:700px; width:95%; max-height:90vh; overflow-y:auto; padding:2rem; position:relative; animation:scaleIn 0.3s ease;">
+            <button onclick="closeSuperAdminUpgrade()" style="position:absolute; top:1rem; right:1rem; background:#EF4444; color:white; border:none; border-radius:50%; width:35px; height:35px; cursor:pointer; font-size:1.2rem;">×</button>
+            
+            <h2 style="color:#8B5CF6; margin-top:0; display:flex; align-items:center; gap:0.75rem;">
+                <span>⬆️ Super Admin - Upgrade User</span>
+            </h2>
+            <p style="color:#666;">Manually upgrade a free user to a paid account. All users created by this user will also be upgraded.</p>
+            
+            <div style="margin:1rem 0;">
+                <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Select User to Upgrade</label>
+                <select id="superAdminUpgradeUser" class="form-control" style="width:100%;">
+                    <option value="">Loading users...</option>
+                </select>
+            </div>
+            
+            <div id="superAdminUpgradeResult" style="margin-top:1rem;"></div>
+            
+            <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+                <button onclick="performSuperAdminUpgrade()" class="btn btn-primary" style="background:#10B981;">
+                    ⬆️ Upgrade to Paid
+                </button>
+                <button onclick="closeSuperAdminUpgrade()" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    
+    // Load free users
+    try {
+        const response = await fetch('/api/admin/get_users');
+        const data = await response.json();
+        
+        if (data.success) {
+            const select = document.getElementById('superAdminUpgradeUser');
+            const freeUsers = data.users.filter(u => 
+                u.payment_status === 'free' && 
+                u.user_category !== 'Super Administrator'
+            );
+            
+            if (freeUsers.length === 0) {
+                select.innerHTML = '<option value="">No free users available to upgrade</option>';
+            } else {
+                select.innerHTML = '<option value="">-- Select User --</option>';
+                freeUsers.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.user_id;
+                    const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.user_id;
+                    option.textContent = `${user.user_id} - ${name} (${user.user_category || 'User'})`;
+                    select.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading users:', error);
+        document.getElementById('superAdminUpgradeUser').innerHTML = '<option value="">Error loading users</option>';
+    }
+    
+    // Close dropdown
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+        menu.classList.remove('show');
+        const parent = menu.closest('.dropdown');
+        if (parent) {
+            const chevron = parent.querySelector('.chevron');
+            if (chevron) chevron.classList.remove('open');
+        }
+    });
+}
+
+function closeSuperAdminUpgrade() {
+    const modal = document.getElementById('superAdminUpgradeModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function performSuperAdminUpgrade() {
+    const userId = document.getElementById('superAdminUpgradeUser').value;
+    const resultDiv = document.getElementById('superAdminUpgradeResult');
+    const upgradeButton = document.querySelector('#superAdminUpgradeModal .btn-primary');
+    
+    if (!userId) {
+        alert('Please select a user to upgrade.');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to upgrade ${userId} to a paid account?\n\nAll users created by this user will also be upgraded.`)) {
+        return;
+    }
+    
+    if (upgradeButton) {
+        showButtonSpinner(upgradeButton);
+    }
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Processing upgrade...</div>';
+    
+    try {
+        const response = await fetch('/api/admin/super_admin_upgrade_user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    ✅ ${data.message}
+                    ${data.children_upgraded && data.children_upgraded.length > 0 ? 
+                        `<br><br>Also upgraded: ${data.children_upgraded.join(', ')}` : ''}
+                </div>
+            `;
+            showToast('✅ User upgraded successfully!', 'success');
+            setTimeout(() => closeSuperAdminUpgrade(), 3000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${data.detail || 'Failed to upgrade user'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        if (upgradeButton) {
+            hideButtonSpinner(upgradeButton);
+        }
+    }
+}
     </script>
     {% block extra_js %}{% endblock %}
 </body>
