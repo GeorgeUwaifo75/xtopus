@@ -140,6 +140,8 @@ async def signup_page(request: Request):
     
     return templates.TemplateResponse("signup.html", {"request": request})
 
+# Replace the dashboard() function in main.py with this corrected version:
+
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Dashboard page - redirects based on user role"""
@@ -248,6 +250,7 @@ async def dashboard(request: Request):
             "properties": all_properties,
             "all_properties": available_properties,  # Use available properties for display
             "can_assign_tenant": can_assign_tenant,
+            "show_available_properties": True,  # Sub-admins can see available properties
             # Add permissions to context
             "permissions": {
                 "can_create_agents": can_create_agents,
@@ -265,7 +268,8 @@ async def dashboard(request: Request):
         context.update({
             "properties": agent_properties,
             "all_properties": available_properties,
-            "can_assign_tenant": True
+            "can_assign_tenant": True,
+            "show_available_properties": True  # Agents can see available properties
         })
     
     else:  # Tenant or regular user
@@ -293,6 +297,10 @@ async def dashboard(request: Request):
         # Regular users and pending tenants can see available properties
         show_available_properties = not is_tenant  # Hide for all tenants (active or pending)
         
+        # Regular users (User category) should see available properties
+        if user_category == "User":
+            show_available_properties = True
+        
         dashboard_template = "dashboard.html"
         context.update({
             "properties": tenant_properties,
@@ -301,10 +309,11 @@ async def dashboard(request: Request):
             "assigned_property_name": assigned_property_name,
             "show_available_properties": show_available_properties,  # Flag for template
             "is_tenant": is_tenant,
-            "is_active_tenant": is_active_tenant
+            "is_active_tenant": is_active_tenant,
+            "can_assign_tenant": False  # Regular users can't assign tenants
         })
     
-    return templates.TemplateResponse(dashboard_template, context)# Add to main.py after the existing page routes
+    return templates.TemplateResponse(dashboard_template, context)
 
 @app.get("/complaints", response_class=HTMLResponse)
 async def complaints_page(request: Request):
