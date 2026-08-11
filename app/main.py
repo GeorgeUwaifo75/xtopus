@@ -163,7 +163,8 @@ async def dashboard(request: Request):
     if not user:
         return RedirectResponse(url="/login", status_code=303)
     
-    user_category = user.get("user_category", "Tenant")
+    #user_category = user.get("user_category", "Tenant")
+    user_category = user.get("user_category", "User")
     
     # Get data for dashboard
     buildings = db.get_collection("buildings")
@@ -321,6 +322,16 @@ async def dashboard(request: Request):
             "is_tenant": is_tenant,
             "is_active_tenant": is_active_tenant
         }
+        
+        # # For the JavaScript in templates, also pass user data as JSON
+        # context["user_json"] = json.dumps({
+        #     "user_id": user.get("user_id", ""),
+        #     "user_category": user.get("user_category", "User"),
+        #     "payment_status": user.get("payment_status", "free"),
+        #     "email": user.get("email", "")
+        # })    
+        
+        
     return templates.TemplateResponse(dashboard_template, context)
 # Add to main.py after the existing page routes
 
