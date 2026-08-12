@@ -63,7 +63,42 @@
 </div>
 
 
+<!-- Add this after the dashboard stats section in admin.html -->
 
+<!-- Complaints Management Section for Admins -->
+<div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:2rem 0;">
+    <h2>📋 Complaint Management</h2>
+    <p>View and manage complaints assigned to you or your team.</p>
+    
+    <!-- Complaint Stats Summary -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap:0.5rem; margin:1rem 0;" id="adminComplaintStats">
+        <div style="background:#f8f9fa; padding:0.75rem; border-radius:8px; text-align:center;">
+            <div style="font-size:1.2rem; font-weight:bold; color:#8B5CF6;" id="adminTotalComplaints">0</div>
+            <div style="font-size:0.7rem; color:#666;">Total</div>
+        </div>
+        <div style="background:#FEF3C7; padding:0.75rem; border-radius:8px; text-align:center;">
+            <div style="font-size:1.2rem; font-weight:bold; color:#F59E0B;" id="adminUnattendedComplaints">0</div>
+            <div style="font-size:0.7rem; color:#666;">Unattended</div>
+        </div>
+        <div style="background:#EDE9FE; padding:0.75rem; border-radius:8px; text-align:center;">
+            <div style="font-size:1.2rem; font-weight:bold; color:#8B5CF6;" id="adminInProgressComplaints">0</div>
+            <div style="font-size:0.7rem; color:#666;">In Progress</div>
+        </div>
+        <div style="background:#D1FAE5; padding:0.75rem; border-radius:8px; text-align:center;">
+            <div style="font-size:1.2rem; font-weight:bold; color:#10B981;" id="adminResolvedComplaints">0</div>
+            <div style="font-size:0.7rem; color:#666;">Resolved</div>
+        </div>
+        <div style="background:#FEE2E2; padding:0.75rem; border-radius:8px; text-align:center;">
+            <div style="font-size:1.2rem; font-weight:bold; color:#EF4444;" id="adminEscalatedComplaints">0</div>
+            <div style="font-size:0.7rem; color:#666;">Escalated</div>
+        </div>
+    </div>
+    
+    <!-- Complaint List -->
+    <div id="adminComplaintsList">
+        <div style="color:#8B5CF6;">⏳ Loading complaints...</div>
+    </div>
+</div>
 
 
 <!-- Add this script after the stats -->
@@ -390,46 +425,6 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
     
 </div>
-
-
-<!-- Add this after the dashboard stats section in admin.html -->
-
-<!-- Complaints Management Section for Admins -->
-<div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:2rem 0;">
-    <h2>📋 Complaint Management</h2>
-    <p>View and manage complaints assigned to you or your team.</p>
-    
-    <!-- Complaint Stats Summary -->
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap:0.5rem; margin:1rem 0;" id="adminComplaintStats">
-        <div style="background:#f8f9fa; padding:0.75rem; border-radius:8px; text-align:center;">
-            <div style="font-size:1.2rem; font-weight:bold; color:#8B5CF6;" id="adminTotalComplaints">0</div>
-            <div style="font-size:0.7rem; color:#666;">Total</div>
-        </div>
-        <div style="background:#FEF3C7; padding:0.75rem; border-radius:8px; text-align:center;">
-            <div style="font-size:1.2rem; font-weight:bold; color:#F59E0B;" id="adminUnattendedComplaints">0</div>
-            <div style="font-size:0.7rem; color:#666;">Unattended</div>
-        </div>
-        <div style="background:#EDE9FE; padding:0.75rem; border-radius:8px; text-align:center;">
-            <div style="font-size:1.2rem; font-weight:bold; color:#8B5CF6;" id="adminInProgressComplaints">0</div>
-            <div style="font-size:0.7rem; color:#666;">In Progress</div>
-        </div>
-        <div style="background:#D1FAE5; padding:0.75rem; border-radius:8px; text-align:center;">
-            <div style="font-size:1.2rem; font-weight:bold; color:#10B981;" id="adminResolvedComplaints">0</div>
-            <div style="font-size:0.7rem; color:#666;">Resolved</div>
-        </div>
-        <div style="background:#FEE2E2; padding:0.75rem; border-radius:8px; text-align:center;">
-            <div style="font-size:1.2rem; font-weight:bold; color:#EF4444;" id="adminEscalatedComplaints">0</div>
-            <div style="font-size:0.7rem; color:#666;">Escalated</div>
-        </div>
-    </div>
-    
-    <!-- Complaint List -->
-    <div id="adminComplaintsList">
-        <div style="color:#8B5CF6;">⏳ Loading complaints...</div>
-    </div>
-</div>
-
-
 
 <script>
 // Dynamically adjust grid columns based on number of visible buttons
