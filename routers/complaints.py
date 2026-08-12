@@ -14,21 +14,20 @@ from database import db
 from security import security
 
 # ============================================
-# ESCALATION CHECKER (Background Thread) - FIXED
+# ESCALATION CHECKER (Background Thread)
 # ============================================
 
 def check_and_escalate_complaints():
     """Background task to check for complaints that need escalation after 3 days"""
     while True:
         try:
-            time.sleep(60)  # Check every minute
+            time.sleep(60)
             logger.info("Checking for complaints that need escalation...")
             
             complaints = db.get_collection("complaints")
             current_time = datetime.now()
             
             for complaint in complaints:
-                # Check if complaint is still in "unattended" status
                 if complaint.get("status") == "unattended":
                     created_at = complaint.get("created_at")
                     if created_at:
@@ -36,15 +35,11 @@ def check_and_escalate_complaints():
                             created_dt = datetime.fromisoformat(created_at)
                             time_diff = current_time - created_dt
                             
-                            # Check if 3 days (72 hours) have passed
                             if time_diff >= timedelta(days=3):
-                                # Check if already escalated
                                 if not complaint.get("escalated"):
-                                    # Get the current assignee
                                     assignee_id = complaint.get("assignee_id")
                                     users = db.get_collection("users")
                                     
-                                    # Find the property creator (Administrator)
                                     property_id = complaint.get("property_id")
                                     properties = db.get_collection("properties")
                                     property_item = None
@@ -56,7 +51,6 @@ def check_and_escalate_complaints():
                                     if property_item:
                                         admin_id = property_item.get("created_by")
                                         if admin_id:
-                                            # Find the admin user
                                             admin_user = None
                                             for u in users:
                                                 if u.get("user_id") == admin_id:
@@ -64,10 +58,8 @@ def check_and_escalate_complaints():
                                                     break
                                             
                                             if admin_user:
-                                                # Escalate to the administrator
                                                 admin_name = f"{admin_user.get('first_name', '')} {admin_user.get('last_name', '')}".strip() or admin_id
                                                 
-                                                # Update complaint
                                                 complaint["assignee_id"] = admin_id
                                                 complaint["assignee_name"] = admin_name
                                                 complaint["escalated"] = True
@@ -76,7 +68,6 @@ def check_and_escalate_complaints():
                                                 complaint["escalation_reason"] = "Auto-escalated after 3 days of no response"
                                                 complaint["updated_at"] = datetime.now().isoformat()
                                                 
-                                                # Add escalation history
                                                 if "escalation_history" not in complaint:
                                                     complaint["escalation_history"] = []
                                                 complaint["escalation_history"].append({
@@ -86,7 +77,6 @@ def check_and_escalate_complaints():
                                                     "timestamp": datetime.now().isoformat()
                                                 })
                                                 
-                                                # Save to database
                                                 data = db.get_data()
                                                 for idx, c in enumerate(data.get("complaints", [])):
                                                     if c.get("_id") == complaint.get("_id"):
@@ -94,7 +84,6 @@ def check_and_escalate_complaints():
                                                         db.update_data(data)
                                                         break
                                                 
-                                                # Notify the new assignee
                                                 create_notification(
                                                     admin_id,
                                                     "complaint_escalated",
@@ -106,7 +95,6 @@ def check_and_escalate_complaints():
                                                     }
                                                 )
                                                 
-                                                # Notify the tenant
                                                 create_notification(
                                                     complaint.get("tenant_id"),
                                                     "complaint_escalated",
@@ -125,7 +113,6 @@ def check_and_escalate_complaints():
         except Exception as e:
             logger.error(f"Error in escalation checker: {e}")
 
-# Start the escalation checker in a background thread
 def start_escalation_checker():
     thread = threading.Thread(target=check_and_escalate_complaints, daemon=True)
     thread.start()
@@ -134,18 +121,6 @@ def start_escalation_checker():
 # ============================================
 # HELPER FUNCTIONS
 # ============================================
-
-def get_current_user(request: Request):
-    """Get current user from session token"""
-    token = request.cookies.get("session_token")
-    if not token:
-        logger.warning("No session token found in cookies")
-        return None
-    user_data = security.get_current_user(token)
-    if not user_data:
-        logger.warning(f"Invalid session token: {token[:10]}...")
-        return None
-    return user_data
 
 def get_current_user(request: Request):
     """Get current user from session token"""
@@ -194,18 +169,17 @@ def record_expense(description: str, amount: float, category: str, complaint_id:
     }
     data["expenses"].append(expense)
     db.update_data(data)
-    logger.info(f"Expense recorded: {description} - ₦{amount}")
     return True
 
 def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
     """
-    Check if a complaint is visible to a user based on hierarchy.
+    Check if a complaint is visible to a user.
     A complaint is visible if:
     1. User is the tenant who created it
-    2. User is the assignee (most important!)
+    2. User is the assignee
     3. User is a Super Administrator or Administrator
-    4. User is a Sub-Administrator and the assignee is their child (Agent or User they created)
-    5. User is an Agent and the assignee is their parent (the Admin who created them)
+    4. User is a Sub-Administrator and the assignee is their child
+    5. User is an Agent and the assignee is their parent
     """
     assignee_id = complaint.get("assignee_id")
     tenant_id = complaint.get("tenant_id")
@@ -214,7 +188,7 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
     if tenant_id == user_id:
         return True
     
-    # User can see complaints assigned to them - THIS IS THE MOST IMPORTANT CHECK
+    # User can see complaints assigned to them
     if assignee_id == user_id:
         return True
     
@@ -235,27 +209,23 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
     if user_category in ["Super Administrator", "Administrator"]:
         return True
     
-    # Sub-Administrator: can see complaints assigned to their children (Agents they created)
+    # Sub-Administrator: can see complaints assigned to their children
     if user_category == "Sub-Administrator":
-        # Get all users created by this Sub-Admin (direct children)
         for u in users:
             if u.get("created_by") == user_id:
-                # If this child is the assignee, the complaint is visible
                 if u.get("user_id") == assignee_id:
                     return True
-                # Also check if this child created the assignee (grandchildren)
                 for u2 in users:
                     if u2.get("created_by") == u.get("user_id") and u2.get("user_id") == assignee_id:
                         return True
     
-    # Agent: can see complaints assigned to their parent (Admin who created them)
+    # Agent: can see complaints assigned to their parent
     if user_category == "Agent":
-        # Check if the assignee is the user's creator
         created_by = current_user.get("created_by")
         if created_by == assignee_id:
             return True
     
-    # Check if user is the property creator (Administrator who owns the property)
+    # Check if user is the property creator
     property_id = complaint.get("property_id")
     if property_id:
         properties = db.get_collection("properties")
@@ -281,7 +251,6 @@ async def get_assignees(request: Request):
                 content={"success": False, "detail": "Not authenticated"}
             )
         
-        # Only tenants can make complaints
         if current_user.get("user_category") != "Tenant":
             return JSONResponse(
                 status_code=403,
@@ -292,7 +261,6 @@ async def get_assignees(request: Request):
         properties = db.get_collection("properties")
         assignees = []
         
-        # Get the tenant's assigned property to find the appropriate assignees
         assigned_property_id = current_user.get("assigned_property_id")
         property_creator = None
         
@@ -302,24 +270,18 @@ async def get_assignees(request: Request):
                     property_creator = p.get("created_by")
                     break
         
-        # Build a list of potential assignees
         for user in users:
             user_category = user.get("user_category", "")
             if user_category in ["Agent", "Sub-Administrator", "Administrator", "Super Administrator"]:
-                # Check if this user is relevant to the tenant
                 is_relevant = False
                 
-                # If the property creator is relevant
                 if property_creator and user.get("user_id") == property_creator:
                     is_relevant = True
                 
-                # Super Admins and Admins are always relevant
                 if user_category in ["Super Administrator", "Administrator"]:
                     is_relevant = True
                 
-                # Agents and Sub-Admins who created the property or are in the chain
                 if not is_relevant and property_creator:
-                    # Check if this user is under the property creator
                     if user.get("created_by") == property_creator:
                         is_relevant = True
                 
@@ -331,7 +293,6 @@ async def get_assignees(request: Request):
                         "email": user.get("email", "")
                     })
         
-        # If no relevant assignees found, include all admins, sub-admins, and agents
         if not assignees:
             for user in users:
                 user_category = user.get("user_category", "")
@@ -356,7 +317,7 @@ async def get_assignees(request: Request):
         )
 
 # ============================================
-# CREATE COMPLAINT (Tenant)
+# CREATE COMPLAINT (Tenant) - FIXED
 # ============================================
 @router.post("/create")
 async def create_complaint(request: Request):
@@ -369,7 +330,6 @@ async def create_complaint(request: Request):
                 content={"success": False, "detail": "Not authenticated"}
             )
         
-        # Only tenants can create complaints
         if current_user.get("user_category") != "Tenant":
             return JSONResponse(
                 status_code=403,
@@ -388,12 +348,10 @@ async def create_complaint(request: Request):
                 content={"success": False, "detail": "Subject, description, and assignee are required"}
             )
         
-        # Validate priority
         valid_priorities = ["low", "medium", "high", "emergency"]
         if priority not in valid_priorities:
             priority = "medium"
         
-        # Get assignee info
         users = db.get_collection("users")
         assignee = None
         for u in users:
@@ -407,10 +365,12 @@ async def create_complaint(request: Request):
                 content={"success": False, "detail": "Assignee not found"}
             )
         
-        # Get the property ID from the tenant
         property_id = current_user.get("assigned_property_id")
         
-        # Create complaint with "unattended" status
+        # Log the complaint creation
+        logger.info(f"Creating complaint for tenant {current_user.get('user_id')} assigned to {assignee_id}")
+        logger.info(f"Property ID: {property_id}")
+        
         complaint = {
             "_id": f"comp_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}",
             "tenant_id": current_user.get("user_id"),
@@ -421,7 +381,7 @@ async def create_complaint(request: Request):
             "subject": subject,
             "description": description,
             "priority": priority,
-            "status": "unattended",  # unattended, contacted, in_progress, completed, resolved, not_resolved
+            "status": "unattended",
             "cost": 0,
             "admin_comment": "",
             "resolved": None,
@@ -437,7 +397,8 @@ async def create_complaint(request: Request):
         success = db.add_to_collection("complaints", complaint)
         
         if success:
-            # Notify the assignee
+            logger.info(f"Complaint created successfully with ID: {complaint['_id']}")
+            
             create_notification(
                 assignee_id,
                 "complaint_assigned",
@@ -450,7 +411,6 @@ async def create_complaint(request: Request):
                 }
             )
             
-            # Notify the tenant that complaint was submitted
             create_notification(
                 current_user.get("user_id"),
                 "complaint_submitted",
@@ -493,7 +453,6 @@ async def get_my_complaints(request: Request):
                 content={"success": False, "detail": "Not authenticated"}
             )
         
-        # Only tenants can view their complaints
         if current_user.get("user_category") != "Tenant":
             return JSONResponse(
                 status_code=403,
@@ -503,7 +462,6 @@ async def get_my_complaints(request: Request):
         complaints = db.get_collection("complaints")
         user_complaints = [c for c in complaints if c.get("tenant_id") == current_user.get("user_id")]
         
-        # Sort by created_at descending
         user_complaints.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         
         return JSONResponse({
@@ -546,18 +504,15 @@ async def get_complaint(request: Request, complaint_id: str):
                 content={"success": False, "detail": "Complaint not found"}
             )
         
-        # Check permissions
         user_id = current_user.get("user_id")
         user_category = current_user.get("user_category", "")
         
-        # Super Admins can see all complaints
         if user_category == "Super Administrator":
             return JSONResponse({
                 "success": True,
                 "complaint": complaint
             })
         
-        # Check if user has permission
         if not is_complaint_visible_to_user(complaint, user_id):
             return JSONResponse(
                 status_code=403,
@@ -576,6 +531,9 @@ async def get_complaint(request: Request, complaint_id: str):
             content={"success": False, "detail": str(e)}
         )
 
+# ============================================
+# GET ASSIGNED COMPLAINTS - FIXED
+# ============================================
 @router.get("/assigned")
 async def get_assigned_complaints(
     request: Request,
@@ -597,7 +555,6 @@ async def get_assigned_complaints(
         logger.info(f"===== GET ASSIGNED COMPLAINTS =====")
         logger.info(f"User ID: {user_id}, Category: {user_category}")
         
-        # Only these roles can view complaints
         if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent", "Tenant"]:
             return JSONResponse(
                 status_code=403,
@@ -624,17 +581,12 @@ async def get_assigned_complaints(
         
         logger.info(f"Visible complaints: {len(visible_complaints)}")
         
-        # Apply status filter
         if status and status != "all":
             visible_complaints = [c for c in visible_complaints if c.get("status") == status]
-            logger.info(f"After status filter '{status}': {len(visible_complaints)}")
         
-        # Apply priority filter
         if priority and priority != "all":
             visible_complaints = [c for c in visible_complaints if c.get("priority") == priority]
-            logger.info(f"After priority filter '{priority}': {len(visible_complaints)}")
         
-        # Sort by priority (emergency first) and then by created_at
         priority_order = {"emergency": 0, "high": 1, "medium": 2, "low": 3}
         status_order = {"unattended": 0, "contacted": 1, "in_progress": 2, "completed": 3, "resolved": 4, "not_resolved": 5}
         
@@ -663,9 +615,9 @@ async def get_assigned_complaints(
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
-    
+
 # ============================================
-# UPDATE COMPLAINT (Admin/Agent) - FIXED
+# UPDATE COMPLAINT (Admin/Agent)
 # ============================================
 @router.put("/{complaint_id}")
 async def update_complaint(request: Request, complaint_id: str):
@@ -681,14 +633,12 @@ async def update_complaint(request: Request, complaint_id: str):
         user_category = current_user.get("user_category", "")
         user_id = current_user.get("user_id")
         
-        # Only these roles can update complaints
         if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent"]:
             return JSONResponse(
                 status_code=403,
                 content={"success": False, "detail": "Access denied"}
             )
         
-        # Find the complaint
         complaints = db.get_collection("complaints")
         complaint = None
         complaint_index = -1
@@ -704,21 +654,17 @@ async def update_complaint(request: Request, complaint_id: str):
                 content={"success": False, "detail": "Complaint not found"}
             )
         
-        # Check permission - user must be assignee, admin, or property creator
         assignee_id = complaint.get("assignee_id")
         property_id = complaint.get("property_id")
         
         can_update = False
         
-        # User is the assignee
         if user_id == assignee_id:
             can_update = True
         
-        # User is Super Admin
         if user_category == "Super Administrator":
             can_update = True
         
-        # User is the property creator (Administrator)
         if property_id:
             properties = db.get_collection("properties")
             for p in properties:
@@ -738,7 +684,6 @@ async def update_complaint(request: Request, complaint_id: str):
         cost = body.get("cost")
         admin_comment = body.get("admin_comment")
         
-        # Validate status
         valid_statuses = ["unattended", "contacted", "in_progress", "completed"]
         if new_status and new_status not in valid_statuses:
             return JSONResponse(
@@ -746,13 +691,8 @@ async def update_complaint(request: Request, complaint_id: str):
                 content={"success": False, "detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"}
             )
         
-        # Update fields
-        old_status = complaint.get("status")
-        
         if new_status:
             complaint["status"] = new_status
-            
-            # Reset escalation when status changes from unattended
             if new_status != "unattended":
                 complaint["escalated"] = False
                 complaint["escalation_level"] = 0
@@ -765,13 +705,11 @@ async def update_complaint(request: Request, complaint_id: str):
         
         complaint["updated_at"] = datetime.now().isoformat()
         
-        # Save to database
         data = db.get_data()
         data["complaints"][complaint_index] = complaint
         success = db.update_data(data)
         
         if success:
-            # Notify the tenant about status change
             tenant_id = complaint.get("tenant_id")
             if tenant_id:
                 status_labels = {
@@ -782,7 +720,6 @@ async def update_complaint(request: Request, complaint_id: str):
                 }
                 status_label = status_labels.get(complaint.get("status"), complaint.get("status"))
                 
-                # If status is completed, send special notification asking for confirmation
                 if complaint.get("status") == "completed":
                     message = f"📋 Your complaint '{complaint.get('subject')}' has been marked as COMPLETED. Please confirm if it has been resolved."
                     notification_type = "complaint_completed"
@@ -806,7 +743,6 @@ async def update_complaint(request: Request, complaint_id: str):
                     }
                 )
             
-            # If cost > 0 and status is completed, record as expense
             if complaint.get("cost", 0) > 0 and complaint.get("status") == "completed":
                 expense_description = f"Complaint Resolution: {complaint.get('subject', 'Unknown')}"
                 record_expense(
@@ -837,7 +773,7 @@ async def update_complaint(request: Request, complaint_id: str):
         )
 
 # ============================================
-# CONFIRM RESOLUTION (Tenant) - FIXED
+# CONFIRM RESOLUTION (Tenant)
 # ============================================
 @router.post("/confirm_resolution")
 async def confirm_resolution(request: Request):
@@ -850,7 +786,6 @@ async def confirm_resolution(request: Request):
                 content={"success": False, "detail": "Not authenticated"}
             )
         
-        # Only tenants can confirm resolution
         if current_user.get("user_category") != "Tenant":
             return JSONResponse(
                 status_code=403,
@@ -873,7 +808,6 @@ async def confirm_resolution(request: Request):
                 content={"success": False, "detail": "Resolved status is required (true/false)"}
             )
         
-        # Find the complaint
         complaints = db.get_collection("complaints")
         complaint = None
         complaint_index = -1
@@ -889,21 +823,18 @@ async def confirm_resolution(request: Request):
                 content={"success": False, "detail": "Complaint not found"}
             )
         
-        # Check if this complaint belongs to the tenant
         if complaint.get("tenant_id") != current_user.get("user_id"):
             return JSONResponse(
                 status_code=403,
                 content={"success": False, "detail": "You can only confirm resolution for your own complaints"}
             )
         
-        # Check if complaint is in completed status
         if complaint.get("status") != "completed":
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "detail": "Complaint must be in 'completed' status before confirming resolution"}
             )
         
-        # Update complaint
         complaint["resolved"] = resolved
         if resolved:
             complaint["status"] = "resolved"
@@ -911,13 +842,11 @@ async def confirm_resolution(request: Request):
             complaint["status"] = "not_resolved"
         complaint["updated_at"] = datetime.now().isoformat()
         
-        # Save to database
         data = db.get_data()
         data["complaints"][complaint_index] = complaint
         success = db.update_data(data)
         
         if success:
-            # Notify the assignee
             assignee_id = complaint.get("assignee_id")
             if assignee_id:
                 resolution_status = "✅ RESOLVED" if resolved else "❌ NOT RESOLVED"
@@ -932,9 +861,7 @@ async def confirm_resolution(request: Request):
                     }
                 )
             
-            # If resolved, also notify the administrator
             if resolved:
-                # Find the property creator
                 property_id = complaint.get("property_id")
                 if property_id:
                     properties = db.get_collection("properties")
@@ -972,7 +899,7 @@ async def confirm_resolution(request: Request):
         )
 
 # ============================================
-# GET COMPLAINT STATS
+# GET COMPLAINT STATS - FIXED
 # ============================================
 @router.get("/stats")
 async def get_complaint_stats(request: Request):
@@ -1023,10 +950,13 @@ async def get_complaint_stats(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
-    
-@router.get("/debug/check_assignee/{complaint_id}")
-async def debug_check_assignee(request: Request, complaint_id: str):
-    """Debug endpoint to check complaint assignee"""
+
+# ============================================
+# DEBUG: GET ALL COMPLAINTS (Super Admin only)
+# ============================================
+@router.get("/debug/all")
+async def debug_all_complaints(request: Request):
+    """DEBUG: Get all complaints with full details"""
     try:
         current_user = get_current_user(request)
         if not current_user:
@@ -1035,21 +965,15 @@ async def debug_check_assignee(request: Request, complaint_id: str):
                 content={"success": False, "detail": "Not authenticated"}
             )
         
-        complaints = db.get_collection("complaints")
-        complaint = None
-        for c in complaints:
-            if c.get("_id") == complaint_id:
-                complaint = c
-                break
-        
-        if not complaint:
+        if current_user.get("user_category") != "Super Administrator":
             return JSONResponse(
-                status_code=404,
-                content={"success": False, "detail": "Complaint not found"}
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
             )
         
-        # Get all users for reference
+        complaints = db.get_collection("complaints")
         users = db.get_collection("users")
+        
         user_map = {}
         for u in users:
             user_map[u.get("user_id")] = {
@@ -1057,24 +981,30 @@ async def debug_check_assignee(request: Request, complaint_id: str):
                 "category": u.get("user_category", "Unknown")
             }
         
+        result = []
+        for c in complaints:
+            result.append({
+                "id": c.get("_id"),
+                "subject": c.get("subject"),
+                "tenant_id": c.get("tenant_id"),
+                "tenant_name": c.get("tenant_name"),
+                "assignee_id": c.get("assignee_id"),
+                "assignee_name": c.get("assignee_name"),
+                "assignee_info": user_map.get(c.get("assignee_id"), {}),
+                "tenant_info": user_map.get(c.get("tenant_id"), {}),
+                "property_id": c.get("property_id"),
+                "status": c.get("status"),
+                "priority": c.get("priority"),
+                "escalated": c.get("escalated", False),
+                "escalation_level": c.get("escalation_level", 0),
+                "created_at": c.get("created_at"),
+                "updated_at": c.get("updated_at")
+            })
+        
         return JSONResponse({
             "success": True,
-            "complaint": {
-                "id": complaint.get("_id"),
-                "subject": complaint.get("subject"),
-                "assignee_id": complaint.get("assignee_id"),
-                "assignee_name": complaint.get("assignee_name"),
-                "tenant_id": complaint.get("tenant_id"),
-                "tenant_name": complaint.get("tenant_name"),
-                "status": complaint.get("status"),
-                "created_at": complaint.get("created_at")
-            },
-            "assignee_info": user_map.get(complaint.get("assignee_id"), {}),
-            "tenant_info": user_map.get(complaint.get("tenant_id"), {}),
-            "current_user": {
-                "id": current_user.get("user_id"),
-                "category": current_user.get("user_category")
-            }
+            "total": len(result),
+            "complaints": result
         })
         
     except Exception as e:
@@ -1082,4 +1012,4 @@ async def debug_check_assignee(request: Request, complaint_id: str):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        )    
+        )

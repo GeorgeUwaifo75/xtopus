@@ -84,29 +84,29 @@
     <!-- ADMIN/AGENT VIEW - Manage Complaints -->
     <!-- ============================================ -->
     
-    <!-- Stats Summary -->
-    <div id="complaintStats" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap:0.75rem; margin:1rem 0;">
-        <div class="stat-card" style="background:#f8f9fa; padding:1rem; border-radius:8px; text-align:center;">
-            <div class="stat-number" id="statTotal" style="font-size:1.5rem; color:#8B5CF6;">0</div>
-            <div class="stat-label" style="font-size:0.8rem; color:#666;">Total</div>
-        </div>
-        <div class="stat-card" style="background:#FEF3C7; padding:1rem; border-radius:8px; text-align:center;">
-            <div class="stat-number" id="statUnattended" style="font-size:1.5rem; color:#F59E0B;">0</div>
-            <div class="stat-label" style="font-size:0.8rem; color:#666;">Unattended</div>
-        </div>
-        <div class="stat-card" style="background:#EDE9FE; padding:1rem; border-radius:8px; text-align:center;">
-            <div class="stat-number" id="statInProgress" style="font-size:1.5rem; color:#8B5CF6;">0</div>
-            <div class="stat-label" style="font-size:0.8rem; color:#666;">In Progress</div>
-        </div>
-        <div class="stat-card" style="background:#D1FAE5; padding:1rem; border-radius:8px; text-align:center;">
-            <div class="stat-number" id="statResolved" style="font-size:1.5rem; color:#10B981;">0</div>
-            <div class="stat-label" style="font-size:0.8rem; color:#666;">Resolved</div>
-        </div>
-        <div class="stat-card" style="background:#FEE2E2; padding:1rem; border-radius:8px; text-align:center;">
-            <div class="stat-number" id="statEscalated" style="font-size:1.5rem; color:#EF4444;">0</div>
-            <div class="stat-label" style="font-size:0.8rem; color:#666;">Escalated</div>
-        </div>
+   <!-- Stats Summary - Updated to show correct counts -->
+<div id="complaintStats" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap:0.75rem; margin:1rem 0;">
+    <div class="stat-card" style="background:#f8f9fa; padding:1rem; border-radius:8px; text-align:center;">
+        <div class="stat-number" id="statTotal" style="font-size:1.5rem; color:#8B5CF6;">0</div>
+        <div class="stat-label" style="font-size:0.8rem; color:#666;">Total</div>
     </div>
+    <div class="stat-card" style="background:#FEF3C7; padding:1rem; border-radius:8px; text-align:center;">
+        <div class="stat-number" id="statUnattended" style="font-size:1.5rem; color:#F59E0B;">0</div>
+        <div class="stat-label" style="font-size:0.8rem; color:#666;">Unattended</div>
+    </div>
+    <div class="stat-card" style="background:#EDE9FE; padding:1rem; border-radius:8px; text-align:center;">
+        <div class="stat-number" id="statInProgress" style="font-size:1.5rem; color:#8B5CF6;">0</div>
+        <div class="stat-label" style="font-size:0.8rem; color:#666;">In Progress</div>
+    </div>
+    <div class="stat-card" style="background:#D1FAE5; padding:1rem; border-radius:8px; text-align:center;">
+        <div class="stat-number" id="statResolved" style="font-size:1.5rem; color:#10B981;">0</div>
+        <div class="stat-label" style="font-size:0.8rem; color:#666;">Resolved</div>
+    </div>
+    <div class="stat-card" style="background:#FEE2E2; padding:1rem; border-radius:8px; text-align:center;">
+        <div class="stat-number" id="statEscalated" style="font-size:1.5rem; color:#EF4444;">0</div>
+        <div class="stat-label" style="font-size:0.8rem; color:#666;">Escalated</div>
+    </div>
+</div>
     
     <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
         <h2>📋 Manage Complaints</h2>
@@ -719,6 +719,7 @@ async function loadComplaintStats() {
     try {
         const response = await fetch('/api/complaints/stats');
         const data = await response.json();
+        console.log('Stats response:', data);
         
         if (data.success) {
             document.getElementById('statTotal').textContent = data.stats.total || 0;
@@ -730,6 +731,20 @@ async function loadComplaintStats() {
     } catch (error) {
         console.error('Error loading stats:', error);
     }
+
+
+// After getting the complaints data, also fetch debug info if Super Admin
+if (data.user_role === 'Super Administrator') {
+    try {
+        const debugResponse = await fetch('/api/complaints/debug/all');
+        const debugData = await debugResponse.json();
+        console.log('Debug complaints data:', debugData);
+    } catch (e) {
+        console.error('Debug fetch error:', e);
+    }
+}
+
+
 }
 
 // ============================================
