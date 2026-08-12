@@ -1896,6 +1896,20 @@ document.addEventListener('DOMContentLoaded', function() {
     {% else %}
     console.log('User does not have permission to assign tenants');
     {% endif %}
+    
+    // Load complaints for Agents and Sub-Admins (and Admins on their dashboard)
+    const userCategory = '{{ user.user_category|default("User") }}';
+    if (['Super Administrator', 'Administrator', 'Sub-Administrator', 'Agent'].includes(userCategory)) {
+        // Check if we're on admin.html or dashboard.html
+        const adminComplaintsList = document.getElementById('adminComplaintsList');
+        const myComplaintsList = document.getElementById('myComplaintsList');
+        
+        if (adminComplaintsList) {
+            loadDashboardComplaints(); // This will use adminComplaintsList
+        } else if (myComplaintsList) {
+            loadDashboardComplaints(); // This will use myComplaintsList
+        }
+    }
 });
 
 // ============================================
@@ -2726,8 +2740,15 @@ async function submitRoleUpgradeRequest() {
 // ============================================
 
 async function loadDashboardComplaints() {
-    const container = document.getElementById('adminComplaintsList') || document.getElementById('myComplaintsList');
-    if (!container) return;
+    // Try both possible container IDs
+    let container = document.getElementById('adminComplaintsList');
+    if (!container) {
+        container = document.getElementById('myComplaintsList');
+    }
+    if (!container) {
+        console.log('No complaints container found on this page');
+        return;
+    }
     
     container.innerHTML = `
         <div class="loading-placeholder">
@@ -2742,7 +2763,7 @@ async function loadDashboardComplaints() {
         console.log('Complaints data:', data);
         
         if (data.success && data.complaints) {
-            // Update stats if they exist
+            // Update stats if they exist (only in admin.html)
             if (document.getElementById('adminTotalComplaints')) {
                 const total = data.complaints.length;
                 const unattended = data.complaints.filter(c => c.status === 'unattended').length;
@@ -2768,7 +2789,10 @@ async function loadDashboardComplaints() {
             
             let html = '<div style="margin-top:0.5rem;">';
             
-            data.complaints.forEach(complaint => {
+            // Show only the most recent 5 complaints on dashboard
+            const recentComplaints = data.complaints.slice(0, 5);
+            
+            recentComplaints.forEach(complaint => {
                 const statusColors = {
                     'unattended': '#F59E0B',
                     'contacted': '#8B5CF6',
@@ -2847,12 +2871,24 @@ async function loadDashboardComplaints() {
                 `;
             });
             
+            // If there are more complaints, show a "View All" link
+            if (data.complaints.length > 5) {
+                html += `
+                    <div style="text-align:center; margin-top:0.5rem;">
+                        <a href="/complaints" class="btn btn-primary" style="background:#8B5CF6; text-decoration:none;">
+                            View All ${data.complaints.length} Complaints →
+                        </a>
+                    </div>
+                `;
+            }
+            
             html += '</div>';
             container.innerHTML = html;
         } else {
             container.innerHTML = `
                 <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
                     <p style="color:#EF4444;">❌ ${data.detail || 'Failed to load complaints'}</p>
+                    <button onclick="loadDashboardComplaints()" class="btn btn-primary" style="margin-top:0.5rem;">🔄 Retry</button>
                 </div>
             `;
         }

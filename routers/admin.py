@@ -6133,4 +6133,90 @@ async def super_admin_upgrade_user(request: Request):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
+        ) 
+    
+# ============================================
+# GET ADMIN NOTIFICATIONS
+# ============================================
+@router.get("/get_admin_notifications")
+async def get_admin_notifications(request: Request):
+    """Get admin notifications for dashboard"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        category = current_user.get("user_category", "")
+        if category not in ["Super Administrator", "Administrator"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        users = db.get_collection("users")
+        properties = db.get_collection("properties")
+        
+        # Get expiring and overdue tenants
+        today = datetime.now().date()
+        expiring_soon = []
+        overdue = []
+        
+        for user in users:
+            if user.get("user_category") == "Tenant" and user.get("tenant_status") == "active":
+                rental_end = user.get("rental_end_date")
+                if rental_end:
+                    try:
+                        end_date = datetime.fromisoformat(rental_end).date()
+                        days_remaining = (end_date - today).days
+                        
+                        if days_remaining < 0:
+                            property_id = user.get("assigned_property_id")
+                            property_name = "Unknown"
+                            for p in properties:
+                                if p.get("_id") == property_id or p.get("id") == property_id:
+                                    property_name = p.get("name", "Unknown")
+                                    break
+                            
+                            overdue.append({
+                                "message": f"🔴 {user.get('user_id')}'s rent is overdue at {property_name}",
+                                "type": "overdue",
+                                "created_at": datetime.now().isoformat()
+                            })
+                        elif days_remaining <= 30:
+                            property_id = user.get("assigned_property_id")
+                            property_name = "Unknown"
+                            for p in properties:
+                                if p.get("_id") == property_id or p.get("id") == property_id:
+                                    property_name = p.get("name", "Unknown")
+                                    break
+                            
+                            expiring_soon.append({
+                                "message": f"🟠 {user.get('user_id')}'s tenancy ends in {days_remaining} days at {property_name}",
+                                "type": "expiring",
+                                "created_at": datetime.now().isoformat()
+                            })
+                    except:
+                        pass
+        
+        # Combine notifications
+        notifications = overdue + expiring_soon
+        notifications = notifications[:10]  # Limit to 10
+        
+        return JSONResponse({
+            "success": True,
+            "notifications": notifications,
+            "counts": {
+                "expiring_soon": len(expiring_soon),
+                "overdue": len(overdue)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting admin notifications: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
         )    

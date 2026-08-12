@@ -1265,10 +1265,11 @@ async function loadAdminNotifications() {
         }
     } catch (error) {
         console.error('Error loading notifications:', error);
+        // Don't show error, just show empty state
         container.innerHTML = `
             <div style="background:white; padding:1rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
                 <h3 style="margin:0;">🔔 Admin Notifications</h3>
-                <p style="color:#EF4444;">Error loading notifications</p>
+                <p style="color:#666;">No active notifications.</p>
             </div>
         `;
     }
