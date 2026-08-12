@@ -210,7 +210,7 @@ async def dashboard(request: Request):
             "tenants": [t for t in tenants if t.get("user_category") == "Tenant" and t.get("tenant_status") == "active"],
             "pending_tenants": pending_tenants,
             "pending_payments": [p for p in payments if p.get("status") == "pending"],
-            "escalated_complaints": [c for c in complaints if c.get("escalated") == True],
+            "escalated_complaints": [c for c in complaints if c.get("status") == "escalated"],
             "pending_chats": len([c for c in chats if not c.get("read", False)]),
             "admins": [u for u in tenants if u.get("user_category") == "Administrator"],
             "agents": [u for u in tenants if u.get("user_category") == "Agent"],

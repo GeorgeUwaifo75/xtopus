@@ -478,6 +478,60 @@ async def get_my_complaints(request: Request):
         )
 
 # ============================================
+# GET COMPLAINT BY ID
+# ============================================
+@router.get("/{complaint_id}")
+async def get_complaint(request: Request, complaint_id: str):
+    """Get a specific complaint by ID"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        complaints = db.get_collection("complaints")
+        complaint = None
+        for c in complaints:
+            if c.get("_id") == complaint_id:
+                complaint = c
+                break
+        
+        if not complaint:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Complaint not found"}
+            )
+        
+        user_id = current_user.get("user_id")
+        user_category = current_user.get("user_category", "")
+        
+        if user_category == "Super Administrator":
+            return JSONResponse({
+                "success": True,
+                "complaint": complaint
+            })
+        
+        if not is_complaint_visible_to_user(complaint, user_id):
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "You don't have permission to view this complaint"}
+            )
+        
+        return JSONResponse({
+            "success": True,
+            "complaint": complaint
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting complaint: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+# ============================================
 # GET ASSIGNED COMPLAINTS - FIXED
 # ============================================
 @router.get("/assigned")
@@ -557,174 +611,6 @@ async def get_assigned_complaints(
         logger.error(f"Error getting assigned complaints: {e}")
         import traceback
         traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "detail": str(e)}
-        )
-
-# ============================================
-# GET COMPLAINT STATS - FIXED
-# ============================================
-@router.get("/stats")
-async def get_complaint_stats(request: Request):
-    """Get complaint statistics for dashboard"""
-    try:
-        current_user = get_current_user(request)
-        if not current_user:
-            return JSONResponse(
-                status_code=401,
-                content={"success": False, "detail": "Not authenticated"}
-            )
-        
-        user_category = current_user.get("user_category", "")
-        user_id = current_user.get("user_id")
-        
-        if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent", "Tenant"]:
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "detail": "Access denied"}
-            )
-        
-        all_complaints = db.get_collection("complaints")
-        visible_complaints = []
-        
-        for c in all_complaints:
-            if is_complaint_visible_to_user(c, user_id):
-                visible_complaints.append(c)
-        
-        stats = {
-            "total": len(visible_complaints),
-            "unattended": len([c for c in visible_complaints if c.get("status") == "unattended"]),
-            "contacted": len([c for c in visible_complaints if c.get("status") == "contacted"]),
-            "in_progress": len([c for c in visible_complaints if c.get("status") == "in_progress"]),
-            "completed": len([c for c in visible_complaints if c.get("status") == "completed"]),
-            "resolved": len([c for c in visible_complaints if c.get("status") == "resolved"]),
-            "not_resolved": len([c for c in visible_complaints if c.get("status") == "not_resolved"]),
-            "escalated": len([c for c in visible_complaints if c.get("escalated") == True])
-        }
-        
-        return JSONResponse({
-            "success": True,
-            "stats": stats
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting complaint stats: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "detail": str(e)}
-        )
-
-# ============================================
-# DEBUG: GET ALL COMPLAINTS (Super Admin only)
-# ============================================
-@router.get("/debug/all")
-async def debug_all_complaints(request: Request):
-    """DEBUG: Get all complaints with full details"""
-    try:
-        current_user = get_current_user(request)
-        if not current_user:
-            return JSONResponse(
-                status_code=401,
-                content={"success": False, "detail": "Not authenticated"}
-            )
-        
-        if current_user.get("user_category") != "Super Administrator":
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "detail": "Access denied"}
-            )
-        
-        complaints = db.get_collection("complaints")
-        users = db.get_collection("users")
-        
-        user_map = {}
-        for u in users:
-            user_map[u.get("user_id")] = {
-                "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id"),
-                "category": u.get("user_category", "Unknown")
-            }
-        
-        result = []
-        for c in complaints:
-            result.append({
-                "id": c.get("_id"),
-                "subject": c.get("subject"),
-                "tenant_id": c.get("tenant_id"),
-                "tenant_name": c.get("tenant_name"),
-                "assignee_id": c.get("assignee_id"),
-                "assignee_name": c.get("assignee_name"),
-                "assignee_info": user_map.get(c.get("assignee_id"), {}),
-                "tenant_info": user_map.get(c.get("tenant_id"), {}),
-                "property_id": c.get("property_id"),
-                "status": c.get("status"),
-                "priority": c.get("priority"),
-                "escalated": c.get("escalated", False),
-                "escalation_level": c.get("escalation_level", 0),
-                "created_at": c.get("created_at"),
-                "updated_at": c.get("updated_at")
-            })
-        
-        return JSONResponse({
-            "success": True,
-            "total": len(result),
-            "complaints": result
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in debug endpoint: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "detail": str(e)}
-        )# ============================================
-# GET COMPLAINT BY ID
-# ============================================
-@router.get("/{complaint_id}")
-async def get_complaint(request: Request, complaint_id: str):
-    """Get a specific complaint by ID"""
-    try:
-        current_user = get_current_user(request)
-        if not current_user:
-            return JSONResponse(
-                status_code=401,
-                content={"success": False, "detail": "Not authenticated"}
-            )
-        
-        complaints = db.get_collection("complaints")
-        complaint = None
-        for c in complaints:
-            if c.get("_id") == complaint_id:
-                complaint = c
-                break
-        
-        if not complaint:
-            return JSONResponse(
-                status_code=404,
-                content={"success": False, "detail": "Complaint not found"}
-            )
-        
-        user_id = current_user.get("user_id")
-        user_category = current_user.get("user_category", "")
-        
-        if user_category == "Super Administrator":
-            return JSONResponse({
-                "success": True,
-                "complaint": complaint
-            })
-        
-        if not is_complaint_visible_to_user(complaint, user_id):
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "detail": "You don't have permission to view this complaint"}
-            )
-        
-        return JSONResponse({
-            "success": True,
-            "complaint": complaint
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting complaint: {e}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
@@ -1012,3 +898,118 @@ async def confirm_resolution(request: Request):
             content={"success": False, "detail": str(e)}
         )
 
+# ============================================
+# GET COMPLAINT STATS - FIXED
+# ============================================
+@router.get("/stats")
+async def get_complaint_stats(request: Request):
+    """Get complaint statistics for dashboard"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        user_category = current_user.get("user_category", "")
+        user_id = current_user.get("user_id")
+        
+        if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent", "Tenant"]:
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        all_complaints = db.get_collection("complaints")
+        visible_complaints = []
+        
+        for c in all_complaints:
+            if is_complaint_visible_to_user(c, user_id):
+                visible_complaints.append(c)
+        
+        stats = {
+            "total": len(visible_complaints),
+            "unattended": len([c for c in visible_complaints if c.get("status") == "unattended"]),
+            "contacted": len([c for c in visible_complaints if c.get("status") == "contacted"]),
+            "in_progress": len([c for c in visible_complaints if c.get("status") == "in_progress"]),
+            "completed": len([c for c in visible_complaints if c.get("status") == "completed"]),
+            "resolved": len([c for c in visible_complaints if c.get("status") == "resolved"]),
+            "not_resolved": len([c for c in visible_complaints if c.get("status") == "not_resolved"]),
+            "escalated": len([c for c in visible_complaints if c.get("escalated") == True])
+        }
+        
+        return JSONResponse({
+            "success": True,
+            "stats": stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting complaint stats: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+# ============================================
+# DEBUG: GET ALL COMPLAINTS (Super Admin only)
+# ============================================
+@router.get("/debug/all")
+async def debug_all_complaints(request: Request):
+    """DEBUG: Get all complaints with full details"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        if current_user.get("user_category") != "Super Administrator":
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "detail": "Access denied"}
+            )
+        
+        complaints = db.get_collection("complaints")
+        users = db.get_collection("users")
+        
+        user_map = {}
+        for u in users:
+            user_map[u.get("user_id")] = {
+                "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id"),
+                "category": u.get("user_category", "Unknown")
+            }
+        
+        result = []
+        for c in complaints:
+            result.append({
+                "id": c.get("_id"),
+                "subject": c.get("subject"),
+                "tenant_id": c.get("tenant_id"),
+                "tenant_name": c.get("tenant_name"),
+                "assignee_id": c.get("assignee_id"),
+                "assignee_name": c.get("assignee_name"),
+                "assignee_info": user_map.get(c.get("assignee_id"), {}),
+                "tenant_info": user_map.get(c.get("tenant_id"), {}),
+                "property_id": c.get("property_id"),
+                "status": c.get("status"),
+                "priority": c.get("priority"),
+                "escalated": c.get("escalated", False),
+                "escalation_level": c.get("escalation_level", 0),
+                "created_at": c.get("created_at"),
+                "updated_at": c.get("updated_at")
+            })
+        
+        return JSONResponse({
+            "success": True,
+            "total": len(result),
+            "complaints": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
