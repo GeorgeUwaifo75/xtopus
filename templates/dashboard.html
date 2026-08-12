@@ -224,13 +224,14 @@
     <p>Welcome, <strong>{{ user.first_name }} {{ user.last_name }}</strong>!</p>
 
 <!-- Payment Status and Usage -->
+<!--
 <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
     <h3>💳 Your Plan</h3>
     <div id="paymentStatusContainer">
         <div style="color:#8B5CF6;">⏳ Loading plan information...</div>
     </div>
 </div>
-
+-->
 
 <!-- Free User Upgrade Alert -->
 {% if user.payment_status == "free" and user.user_category == "User" %}
