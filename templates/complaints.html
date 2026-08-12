@@ -33,7 +33,7 @@
                 <select id="complaintAssignee" class="form-control" required>
                     <option value="">-- Select Person --</option>
                 </select>
-                <small style="color:#666;">Choose who should handle this complaint (Agent, Administrator, or Sub-Administrator)</small>
+                <small style="color:#666;">Choose who should handle this complaint (Agent, Sub-Administrator, or Administrator)</small>
             </div>
             <div>
                 <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Priority</label>
@@ -59,7 +59,7 @@
         </div>
     </div>
     
-    <!-- Complaint Resolution Confirmation (for pending completion) -->
+    <!-- Complaint Resolution Modal (for tenant confirmation) -->
     <div id="resolutionModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(4px);">
         <div style="background:white; border-radius:12px; max-width:500px; width:95%; padding:2rem; position:relative; animation:scaleIn 0.3s ease;">
             <button onclick="closeResolutionModal()" style="position:absolute; top:1rem; right:1rem; background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
@@ -72,8 +72,8 @@
             </div>
             <p style="font-size:0.9rem; color:#666;">Please confirm if this complaint has been satisfactorily resolved.</p>
             <div style="display:flex; gap:1rem; margin-top:1rem;">
-                <button onclick="confirmResolution(true)" class="btn btn-primary" style="background:#10B981;">✅ Completed</button>
-                <button onclick="confirmResolution(false)" class="btn btn-primary" style="background:#EF4444;">❌ Not Completed</button>
+                <button onclick="confirmResolution(true)" class="btn btn-primary" style="background:#10B981;">✅ Yes, Completed</button>
+                <button onclick="confirmResolution(false)" class="btn btn-primary" style="background:#EF4444;">❌ Not Resolved</button>
             </div>
             <div id="resolutionResult" style="margin-top:1rem;"></div>
         </div>
@@ -91,8 +91,8 @@
             <div class="stat-label" style="font-size:0.8rem; color:#666;">Total</div>
         </div>
         <div class="stat-card" style="background:#FEF3C7; padding:1rem; border-radius:8px; text-align:center;">
-            <div class="stat-number" id="statPending" style="font-size:1.5rem; color:#F59E0B;">0</div>
-            <div class="stat-label" style="font-size:0.8rem; color:#666;">Pending</div>
+            <div class="stat-number" id="statUnattended" style="font-size:1.5rem; color:#F59E0B;">0</div>
+            <div class="stat-label" style="font-size:0.8rem; color:#666;">Unattended</div>
         </div>
         <div class="stat-card" style="background:#EDE9FE; padding:1rem; border-radius:8px; text-align:center;">
             <div class="stat-number" id="statInProgress" style="font-size:1.5rem; color:#8B5CF6;">0</div>
@@ -102,18 +102,23 @@
             <div class="stat-number" id="statResolved" style="font-size:1.5rem; color:#10B981;">0</div>
             <div class="stat-label" style="font-size:0.8rem; color:#666;">Resolved</div>
         </div>
+        <div class="stat-card" style="background:#FEE2E2; padding:1rem; border-radius:8px; text-align:center;">
+            <div class="stat-number" id="statEscalated" style="font-size:1.5rem; color:#EF4444;">0</div>
+            <div class="stat-label" style="font-size:0.8rem; color:#666;">Escalated</div>
+        </div>
     </div>
     
     <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
         <h2>📋 Manage Complaints</h2>
-        <p>View and manage all complaints assigned to you.</p>
+        <p>View and manage complaints assigned to you. Status tags: Unattended → Contacted Tenant → In Progress → Completed</p>
         
         <!-- Filter Controls -->
         <div style="display:flex; gap:1rem; flex-wrap:wrap; margin:1rem 0;">
             <div style="flex:1; min-width:150px;">
                 <select id="complaintStatusFilter" class="form-control" onchange="loadAdminComplaints()">
                     <option value="all">All Status</option>
-                    <option value="pending">Pending</option>
+                    <option value="unattended">Unattended</option>
+                    <option value="contacted">Contacted Tenant</option>
                     <option value="in_progress">In Progress</option>
                     <option value="completed">Completed</option>
                     <option value="resolved">Resolved</option>
@@ -360,14 +365,16 @@ async function loadTenantComplaints() {
             
             data.complaints.forEach(complaint => {
                 const statusColors = {
-                    'pending': '#F59E0B',
-                    'in_progress': '#8B5CF6',
-                    'completed': '#3B82F6',
+                    'unattended': '#F59E0B',
+                    'contacted': '#8B5CF6',
+                    'in_progress': '#3B82F6',
+                    'completed': '#10B981',
                     'resolved': '#10B981',
                     'not_resolved': '#EF4444'
                 };
                 const statusLabels = {
-                    'pending': '⏳ Pending',
+                    'unattended': '⏳ Unattended',
+                    'contacted': '📞 Contacted Tenant',
                     'in_progress': '🔄 In Progress',
                     'completed': '✅ Completed (Awaiting Confirmation)',
                     'resolved': '✅ Resolved',
@@ -384,33 +391,26 @@ async function loadTenantComplaints() {
                 const statusLabel = statusLabels[complaint.status] || complaint.status;
                 const priorityLabel = priorityLabels[complaint.priority] || complaint.priority;
                 
-
-// Show if tenant has confirmed resolution
                 let resolutionStatus = '';
-                if (complaint.status === 'completed' && !complaint.resolved) {
-                    resolutionStatus = '<span style="color:#F59E0B; font-size:0.8rem;">⏳ Awaiting tenant confirmation</span>';
+                if (complaint.status === 'completed' && complaint.resolved === null) {
+                    resolutionStatus = '<span style="color:#F59E0B; font-size:0.8rem;">⏳ Awaiting your confirmation</span>';
                 } else if (complaint.resolved === true) {
-                    resolutionStatus = '<span style="color:#10B981; font-size:0.8rem;">✅ Tenant confirmed resolved</span>';
+                    resolutionStatus = '<span style="color:#10B981; font-size:0.8rem;">✅ You confirmed resolved</span>';
                 } else if (complaint.resolved === false) {
-                    resolutionStatus = '<span style="color:#EF4444; font-size:0.8rem;">❌ Tenant said not resolved</span>';
+                    resolutionStatus = '<span style="color:#EF4444; font-size:0.8rem;">❌ You said not resolved</span>';
                 }
-
-                // ============================================
-                // FIX: Define escalationIndicator HERE
-                // ============================================
+                
                 let escalationIndicator = '';
                 if (complaint.escalated) {
                     escalationIndicator = `<br><span style="display:inline-block; background:#EF4444; color:white; padding:0.1rem 0.5rem; border-radius:4px; font-size:0.6rem;">⚠️ Escalated (Level ${complaint.escalation_level || 0})</span>`;
                 }
-
-                // ============================================
-                // FIX: Also define escalationNotification for tenant view
-                // ============================================
+                
                 let escalationNotification = '';
                 if (complaint.escalated) {
                     escalationNotification = `
                         <div style="margin-top:0.5rem; background:#FEE2E2; padding:0.5rem 0.75rem; border-radius:4px; border-left:4px solid #EF4444;">
                             <small style="color:#991B1B;">⚠️ This complaint has been escalated to a higher authority (Level ${complaint.escalation_level || 0}).</small>
+                            ${complaint.escalation_reason ? `<br><small style="color:#991B1B;">Reason: ${complaint.escalation_reason}</small>` : ''}
                         </div>
                     `;
                 }
@@ -426,6 +426,7 @@ async function loadTenantComplaints() {
                                 <small style="color:#999;">
                                     Assigned to: ${complaint.assignee_name || complaint.assignee_id} | 
                                     Submitted: ${new Date(complaint.created_at).toLocaleString()}
+                                    ${complaint.updated_at ? `| Updated: ${new Date(complaint.updated_at).toLocaleString()}` : ''}
                                 </small>
                             </div>
                             <div style="text-align:right;">
@@ -444,7 +445,8 @@ async function loadTenantComplaints() {
                                 <strong>📝 Manager's Note:</strong> ${complaint.admin_comment}
                             </div>
                         ` : ''}
-                        ${complaint.status === 'completed' && !complaint.resolved ? `
+                        ${escalationNotification}
+                        ${complaint.status === 'completed' && complaint.resolved === null ? `
                             <div style="margin-top:0.5rem;">
                                 <button onclick="showResolutionModal('${complaint._id}')" class="btn btn-primary" style="background:#10B981; font-size:0.85rem;">
                                     ✅ Confirm Resolution
@@ -605,14 +607,16 @@ async function loadAdminComplaints() {
             
             data.complaints.forEach(complaint => {
                 const statusColors = {
-                    'pending': '#F59E0B',
-                    'in_progress': '#8B5CF6',
-                    'completed': '#3B82F6',
+                    'unattended': '#F59E0B',
+                    'contacted': '#8B5CF6',
+                    'in_progress': '#3B82F6',
+                    'completed': '#10B981',
                     'resolved': '#10B981',
                     'not_resolved': '#EF4444'
                 };
                 const statusLabels = {
-                    'pending': '⏳ Pending',
+                    'unattended': '⏳ Unattended',
+                    'contacted': '📞 Contacted Tenant',
                     'in_progress': '🔄 In Progress',
                     'completed': '✅ Completed',
                     'resolved': '✅ Resolved',
@@ -629,9 +633,8 @@ async function loadAdminComplaints() {
                 const statusLabel = statusLabels[complaint.status] || complaint.status;
                 const priorityLabel = priorityLabels[complaint.priority] || complaint.priority;
                 
-                // Show if tenant has confirmed resolution
                 let resolutionStatus = '';
-                if (complaint.status === 'completed' && !complaint.resolved) {
+                if (complaint.status === 'completed' && complaint.resolved === null) {
                     resolutionStatus = '<span style="color:#F59E0B; font-size:0.8rem;">⏳ Awaiting tenant confirmation</span>';
                 } else if (complaint.resolved === true) {
                     resolutionStatus = '<span style="color:#10B981; font-size:0.8rem;">✅ Tenant confirmed resolved</span>';
@@ -639,8 +642,6 @@ async function loadAdminComplaints() {
                     resolutionStatus = '<span style="color:#EF4444; font-size:0.8rem;">❌ Tenant said not resolved</span>';
                 }
 
-
-               // Add escalation indicator
                 let escalationIndicator = '';
                 if (complaint.escalated) {
                     escalationIndicator = `<br><span style="display:inline-block; background:#EF4444; color:white; padding:0.1rem 0.5rem; border-radius:4px; font-size:0.6rem;">⚠️ Escalated (Level ${complaint.escalation_level || 0})</span>`;
@@ -660,7 +661,12 @@ async function loadAdminComplaints() {
                                 <small style="color:#999;">
                                     Submitted: ${new Date(complaint.created_at).toLocaleString()}
                                     ${complaint.updated_at ? `| Updated: ${new Date(complaint.updated_at).toLocaleString()}` : ''}
+                                    ${complaint.escalated ? `| ⚠️ Escalated` : ''}
                                 </small>
+                                ${complaint.escalation_reason ? `
+                                    <br>
+                                    <small style="color:#EF4444;">Escalation Reason: ${complaint.escalation_reason}</small>
+                                ` : ''}
                             </div>
                             <div style="text-align:right;">
                                 <span style="padding:0.25rem 0.75rem; border-radius:12px; font-size:0.8rem; background:${statusColor}20; color:${statusColor}; font-weight:500;">
@@ -715,9 +721,10 @@ async function loadComplaintStats() {
         
         if (data.success) {
             document.getElementById('statTotal').textContent = data.stats.total || 0;
-            document.getElementById('statPending').textContent = data.stats.pending || 0;
-            document.getElementById('statInProgress').textContent = data.stats.in_progress || 0;
+            document.getElementById('statUnattended').textContent = data.stats.unattended || 0;
+            document.getElementById('statInProgress').textContent = (data.stats.contacted || 0) + (data.stats.in_progress || 0);
             document.getElementById('statResolved').textContent = data.stats.resolved || 0;
+            document.getElementById('statEscalated').textContent = data.stats.escalated || 0;
         }
     } catch (error) {
         console.error('Error loading stats:', error);
@@ -746,14 +753,16 @@ async function showComplaintDetail(complaintId) {
         if (data.success) {
             const c = data.complaint;
             const statusColors = {
-                'pending': '#F59E0B',
-                'in_progress': '#8B5CF6',
-                'completed': '#3B82F6',
+                'unattended': '#F59E0B',
+                'contacted': '#8B5CF6',
+                'in_progress': '#3B82F6',
+                'completed': '#10B981',
                 'resolved': '#10B981',
                 'not_resolved': '#EF4444'
             };
             const statusLabels = {
-                'pending': '⏳ Pending',
+                'unattended': '⏳ Unattended',
+                'contacted': '📞 Contacted Tenant',
                 'in_progress': '🔄 In Progress',
                 'completed': '✅ Completed',
                 'resolved': '✅ Resolved',
@@ -767,12 +776,23 @@ async function showComplaintDetail(complaintId) {
             };
             
             let resolutionStatus = '';
-            if (c.status === 'completed' && !c.resolved) {
+            if (c.status === 'completed' && c.resolved === null) {
                 resolutionStatus = '<span style="color:#F59E0B;">⏳ Awaiting tenant confirmation</span>';
             } else if (c.resolved === true) {
                 resolutionStatus = '<span style="color:#10B981;">✅ Tenant confirmed resolved</span>';
             } else if (c.resolved === false) {
                 resolutionStatus = '<span style="color:#EF4444;">❌ Tenant said not resolved</span>';
+            }
+            
+            let escalationInfo = '';
+            if (c.escalated) {
+                escalationInfo = `
+                    <div style="background:#FEE2E2; padding:0.5rem 0.75rem; border-radius:4px; border-left:4px solid #EF4444; margin:0.5rem 0;">
+                        <small style="color:#991B1B;">⚠️ Escalated (Level ${c.escalation_level || 0})</small>
+                        ${c.escalation_reason ? `<br><small style="color:#991B1B;">Reason: ${c.escalation_reason}</small>` : ''}
+                        ${c.escalated_at ? `<br><small style="color:#991B1B;">Escalated at: ${new Date(c.escalated_at).toLocaleString()}</small>` : ''}
+                    </div>
+                `;
             }
             
             content.innerHTML = `
@@ -788,6 +808,8 @@ async function showComplaintDetail(complaintId) {
                     <div style="grid-column: span 2;"><strong>Submitted:</strong> ${new Date(c.created_at).toLocaleString()}</div>
                     ${c.updated_at ? `<div style="grid-column: span 2;"><strong>Updated:</strong> ${new Date(c.updated_at).toLocaleString()}</div>` : ''}
                 </div>
+                
+                ${escalationInfo}
                 
                 <div style="margin:1rem 0;">
                     <h4>📝 Description</h4>
@@ -808,7 +830,8 @@ async function showComplaintDetail(complaintId) {
                         <div>
                             <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Status</label>
                             <select id="updateStatus" class="form-control">
-                                <option value="pending" ${c.status === 'pending' ? 'selected' : ''}>⏳ Pending</option>
+                                <option value="unattended" ${c.status === 'unattended' ? 'selected' : ''}>⏳ Unattended</option>
+                                <option value="contacted" ${c.status === 'contacted' ? 'selected' : ''}>📞 Contacted Tenant</option>
                                 <option value="in_progress" ${c.status === 'in_progress' ? 'selected' : ''}>🔄 In Progress</option>
                                 <option value="completed" ${c.status === 'completed' ? 'selected' : ''}>✅ Completed</option>
                             </select>
