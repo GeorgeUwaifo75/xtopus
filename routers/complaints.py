@@ -186,7 +186,15 @@ def record_expense(description: str, amount: float, category: str, complaint_id:
     return True
 
 def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
-    """Check if a complaint is visible to a user based on hierarchy."""
+    """
+    Check if a complaint is visible to a user based on hierarchy.
+    A complaint is visible if:
+    1. User is the tenant who created it
+    2. User is the assignee
+    3. User is a Super Administrator or Administrator
+    4. User is a Sub-Administrator and the assignee is their child (Agent or User they created)
+    5. User is an Agent and the assignee is their parent (the Admin who created them)
+    """
     assignee_id = complaint.get("assignee_id")
     tenant_id = complaint.get("tenant_id")
     
@@ -198,14 +206,52 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
     if assignee_id == user_id:
         return True
     
-    # Check if user is an admin who created the property
-    property_id = complaint.get("property_id")
-    properties = db.get_collection("properties")
-    for p in properties:
-        if p.get("_id") == property_id or p.get("id") == property_id:
-            if p.get("created_by") == user_id:
-                return True
+    # Get user info
+    users = db.get_collection("users")
+    current_user = None
+    for u in users:
+        if u.get("user_id") == user_id:
+            current_user = u
             break
+    
+    if not current_user:
+        return False
+    
+    user_category = current_user.get("user_category", "User")
+    
+    # Super Administrators and Administrators can see all complaints
+    if user_category in ["Super Administrator", "Administrator"]:
+        return True
+    
+    # Sub-Administrator: can see complaints assigned to their children (Agents they created)
+    if user_category == "Sub-Administrator":
+        # Get all users created by this Sub-Admin (direct children)
+        for u in users:
+            if u.get("created_by") == user_id:
+                # If this child is the assignee, the complaint is visible
+                if u.get("user_id") == assignee_id:
+                    return True
+                # Also check if this child created the assignee (grandchildren)
+                for u2 in users:
+                    if u2.get("created_by") == u.get("user_id") and u2.get("user_id") == assignee_id:
+                        return True
+    
+    # Agent: can see complaints assigned to their parent (Admin who created them)
+    if user_category == "Agent":
+        # Check if the assignee is the user's creator
+        created_by = current_user.get("created_by")
+        if created_by == assignee_id:
+            return True
+    
+    # Check if user is the property creator (Administrator who owns the property)
+    property_id = complaint.get("property_id")
+    if property_id:
+        properties = db.get_collection("properties")
+        for p in properties:
+            if p.get("_id") == property_id or p.get("id") == property_id:
+                if p.get("created_by") == user_id:
+                    return True
+                break
     
     return False
 
