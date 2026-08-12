@@ -597,7 +597,8 @@ async function loadAdminComplaints() {
                 container.innerHTML = `
                     <div style="text-align:center; padding:2rem; background:#f8f9fa; border-radius:8px;">
                         <p style="color:#666;">No complaints match your filters.</p>
-                        <p style="color:#999; font-size:0.85rem;">If you were expecting to see complaints, check that they are assigned to you.</p>
+                        <p style="color:#999; font-size:0.85rem;">If you were expecting to see complaints, check that they are assigned to you or your team.</p>
+                        <p style="color:#999; font-size:0.85rem; margin-top:0.5rem;">Debug: ${data.debug ? `Total: ${data.debug.total_complaints}, Visible: ${data.debug.visible_count}` : ''}</p>
                     </div>
                 `;
                 return;

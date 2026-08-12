@@ -139,6 +139,18 @@ def get_current_user(request: Request):
     """Get current user from session token"""
     token = request.cookies.get("session_token")
     if not token:
+        logger.warning("No session token found in cookies")
+        return None
+    user_data = security.get_current_user(token)
+    if not user_data:
+        logger.warning(f"Invalid session token: {token[:10]}...")
+        return None
+    return user_data
+
+def get_current_user(request: Request):
+    """Get current user from session token"""
+    token = request.cookies.get("session_token")
+    if not token:
         return None
     user_data = security.get_current_user(token)
     if not user_data:
@@ -190,7 +202,7 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
     Check if a complaint is visible to a user based on hierarchy.
     A complaint is visible if:
     1. User is the tenant who created it
-    2. User is the assignee
+    2. User is the assignee (most important!)
     3. User is a Super Administrator or Administrator
     4. User is a Sub-Administrator and the assignee is their child (Agent or User they created)
     5. User is an Agent and the assignee is their parent (the Admin who created them)
@@ -202,7 +214,7 @@ def is_complaint_visible_to_user(complaint: dict, user_id: str) -> bool:
     if tenant_id == user_id:
         return True
     
-    # User can see complaints assigned to them
+    # User can see complaints assigned to them - THIS IS THE MOST IMPORTANT CHECK
     if assignee_id == user_id:
         return True
     
@@ -564,9 +576,6 @@ async def get_complaint(request: Request, complaint_id: str):
             content={"success": False, "detail": str(e)}
         )
 
-# ============================================
-# GET ASSIGNED COMPLAINTS - FIXED
-# ============================================
 @router.get("/assigned")
 async def get_assigned_complaints(
     request: Request,
@@ -585,6 +594,9 @@ async def get_assigned_complaints(
         user_category = current_user.get("user_category", "")
         user_id = current_user.get("user_id")
         
+        logger.info(f"===== GET ASSIGNED COMPLAINTS =====")
+        logger.info(f"User ID: {user_id}, Category: {user_category}")
+        
         # Only these roles can view complaints
         if user_category not in ["Super Administrator", "Administrator", "Sub-Administrator", "Agent", "Tenant"]:
             return JSONResponse(
@@ -593,19 +605,34 @@ async def get_assigned_complaints(
             )
         
         all_complaints = db.get_collection("complaints")
+        logger.info(f"Total complaints in DB: {len(all_complaints)}")
+        
         visible_complaints = []
         
         for complaint in all_complaints:
-            if is_complaint_visible_to_user(complaint, user_id):
+            complaint_id = complaint.get("_id")
+            complaint_assignee = complaint.get("assignee_id")
+            complaint_tenant = complaint.get("tenant_id")
+            
+            is_visible = is_complaint_visible_to_user(complaint, user_id)
+            
+            if is_visible:
+                logger.info(f"✅ Complaint {complaint_id} is VISIBLE - assignee: {complaint_assignee}, tenant: {complaint_tenant}")
                 visible_complaints.append(complaint)
+            else:
+                logger.info(f"❌ Complaint {complaint_id} is NOT VISIBLE - assignee: {complaint_assignee}, tenant: {complaint_tenant}")
+        
+        logger.info(f"Visible complaints: {len(visible_complaints)}")
         
         # Apply status filter
         if status and status != "all":
             visible_complaints = [c for c in visible_complaints if c.get("status") == status]
+            logger.info(f"After status filter '{status}': {len(visible_complaints)}")
         
         # Apply priority filter
         if priority and priority != "all":
             visible_complaints = [c for c in visible_complaints if c.get("priority") == priority]
+            logger.info(f"After priority filter '{priority}': {len(visible_complaints)}")
         
         # Sort by priority (emergency first) and then by created_at
         priority_order = {"emergency": 0, "high": 1, "medium": 2, "low": 3}
@@ -621,7 +648,11 @@ async def get_assigned_complaints(
             "success": True,
             "complaints": visible_complaints,
             "count": len(visible_complaints),
-            "user_role": user_category
+            "user_role": user_category,
+            "debug": {
+                "total_complaints": len(all_complaints),
+                "visible_count": len(visible_complaints)
+            }
         })
         
     except Exception as e:
@@ -632,7 +663,7 @@ async def get_assigned_complaints(
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
-
+    
 # ============================================
 # UPDATE COMPLAINT (Admin/Agent) - FIXED
 # ============================================
@@ -992,3 +1023,63 @@ async def get_complaint_stats(request: Request):
             status_code=500,
             content={"success": False, "detail": str(e)}
         )
+    
+@router.get("/debug/check_assignee/{complaint_id}")
+async def debug_check_assignee(request: Request, complaint_id: str):
+    """Debug endpoint to check complaint assignee"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        complaints = db.get_collection("complaints")
+        complaint = None
+        for c in complaints:
+            if c.get("_id") == complaint_id:
+                complaint = c
+                break
+        
+        if not complaint:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Complaint not found"}
+            )
+        
+        # Get all users for reference
+        users = db.get_collection("users")
+        user_map = {}
+        for u in users:
+            user_map[u.get("user_id")] = {
+                "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or u.get("user_id"),
+                "category": u.get("user_category", "Unknown")
+            }
+        
+        return JSONResponse({
+            "success": True,
+            "complaint": {
+                "id": complaint.get("_id"),
+                "subject": complaint.get("subject"),
+                "assignee_id": complaint.get("assignee_id"),
+                "assignee_name": complaint.get("assignee_name"),
+                "tenant_id": complaint.get("tenant_id"),
+                "tenant_name": complaint.get("tenant_name"),
+                "status": complaint.get("status"),
+                "created_at": complaint.get("created_at")
+            },
+            "assignee_info": user_map.get(complaint.get("assignee_id"), {}),
+            "tenant_info": user_map.get(complaint.get("tenant_id"), {}),
+            "current_user": {
+                "id": current_user.get("user_id"),
+                "category": current_user.get("user_category")
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )    
