@@ -2054,7 +2054,7 @@ function selectUserForManagement(userId) {
 }
 
 // ============================================
-// MODULE TOGGLE - Updated
+// MODULE TOGGLE - Updated with smooth scrolling and header offset
 // ============================================
 function toggleModule(moduleId) {
     const module = document.getElementById(moduleId);
@@ -2072,6 +2072,26 @@ function toggleModule(moduleId) {
         } else {
             module.style.display = 'block';
             module.style.animation = 'fadeSlideIn 0.3s ease';
+            
+            // 👇 NEW: Scroll to the module with smooth behavior and header offset
+            setTimeout(() => {
+                // Get the header height (adjust based on your actual header)
+                const header = document.querySelector('header') || document.querySelector('.header') || document.querySelector('nav');
+                let headerHeight = 80; // Default fallback
+                if (header) {
+                    headerHeight = header.offsetHeight || 80;
+                }
+                
+                const moduleRect = module.getBoundingClientRect();
+                const scrollY = window.scrollY + moduleRect.top - headerHeight - 20; // 20px extra padding
+                
+                window.scrollTo({
+                    top: scrollY,
+                    behavior: 'smooth'
+                });
+            }, 150);
+            
+            // Load content based on module type
             if (moduleId === 'viewTeamModule') {
                 loadTeam();
             } else if (moduleId === 'tenantsReportModule') {
@@ -2079,7 +2099,6 @@ function toggleModule(moduleId) {
             } else if (moduleId === 'manageBuildingsModule') {
                 loadBuildingsForManagement();
             } else if (moduleId === 'managePropertiesModule') {
-                // Use the new endpoint that includes occupant names
                 loadPropertiesForManagement();
             } else if (moduleId === 'manageAllUsersModule') {
                 loadAllUsersForManagement();
@@ -2087,6 +2106,7 @@ function toggleModule(moduleId) {
         }
     }
 }
+
 // ============================================
 // MANAGE USER STATUS
 // ============================================
