@@ -3132,11 +3132,22 @@ async def create_property(
         
         success = db.add_to_collection("properties", property_data)
         
+        # if success:
+        #     return JSONResponse({
+        #         "success": True,
+        #         "message": f"Property '{name}' created successfully with {len(photo_urls)} photos",
+        #         "property": property_data
+        #     })
+        # In create_property function, after successful creation, modify the return:
         if success:
+            # Return property data so the frontend can use it
             return JSONResponse({
                 "success": True,
                 "message": f"Property '{name}' created successfully with {len(photo_urls)} photos",
-                "property": property_data
+                "property": property_data,
+                "redirect_to_agreement": True,  # Add this flag
+                "property_id": property_data.get("_id") or property_data.get("id"), #New
+                "property_name": property_data.get("name") #New
             })
         else:
             return JSONResponse(
@@ -3307,7 +3318,10 @@ async def create_multiple_properties(
                 "success": True,
                 "message": f"Created {len(created_properties)} properties successfully with {len(photo_urls)} photos each",
                 "properties": created_properties,
-                "count": len(created_properties)
+                "count": len(created_properties),
+                "redirect_to_agreement": True,  # Add this flag
+                "property_id": property_data.get("_id") or property_data.get("id"), #New
+                "property_name": property_data.get("name") #New
             })
         else:
             return JSONResponse(
@@ -6216,6 +6230,103 @@ async def get_admin_notifications(request: Request):
         
     except Exception as e:
         logger.error(f"Error getting admin notifications: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )   
+    
+# ============================================
+# GET AGREEMENT TEMPLATES
+# ============================================
+@router.get("/get_agreement_templates")
+async def get_agreement_templates(request: Request):
+    """Get all agreement templates for reuse"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        # Get all agreements
+        data = db.get_data()
+        agreements = data.get("agreements", [])
+        
+        # Filter to only show agreements that can be used as templates
+        # (signed agreements or templates)
+        templates = []
+        for agreement in agreements:
+            # Check if this agreement can be used as a template
+            # You can add a "is_template" field or use existing agreements
+            if agreement.get("status") in ["signed", "completed"] or agreement.get("is_template", False):
+                templates.append({
+                    "id": agreement.get("_id") or agreement.get("id"),
+                    "name": agreement.get("name", f"Agreement {agreement.get('_id', '')[:8]}"),
+                    "property_name": agreement.get("property_name", ""),
+                    "rent_amount": agreement.get("rent_amount", 0),
+                    "terms": agreement.get("terms", ""),
+                    "start_date": agreement.get("start_date", ""),
+                    "end_date": agreement.get("end_date", ""),
+                    "created_at": agreement.get("created_at", ""),
+                    "created_by": agreement.get("created_by", "")
+                })
+        
+        # Also check if there's a default template
+        default_template = data.get("default_agreement_template")
+        if default_template and default_template not in [t["id"] for t in templates]:
+            templates.append(default_template)
+        
+        return JSONResponse({
+            "success": True,
+            "templates": templates,
+            "count": len(templates)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting agreement templates: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "detail": str(e)}
+        )
+
+
+# ============================================
+# GET AGREEMENT TEMPLATE BY ID
+# ============================================
+@router.get("/get_agreement_template/{template_id}")
+async def get_agreement_template(request: Request, template_id: str):
+    """Get a specific agreement template by ID"""
+    try:
+        current_user = get_current_user(request)
+        if not current_user:
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "detail": "Not authenticated"}
+            )
+        
+        data = db.get_data()
+        agreements = data.get("agreements", [])
+        
+        template = None
+        for agreement in agreements:
+            if agreement.get("_id") == template_id or agreement.get("id") == template_id:
+                template = agreement
+                break
+        
+        if not template:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "detail": "Template not found"}
+            )
+        
+        return JSONResponse({
+            "success": True,
+            "template": template
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting agreement template: {e}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}

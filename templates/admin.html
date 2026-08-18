@@ -2785,7 +2785,7 @@ document.getElementById('createBuildingForm')?.addEventListener('submit', functi
 });
 
 // ============================================
-// CREATE PROPERTY - Updated with batch support
+// CREATE PROPERTY - Updated with Agreement Flow
 // ============================================
 document.getElementById('createPropertyForm')?.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -2815,20 +2815,38 @@ document.getElementById('createPropertyForm')?.addEventListener('submit', functi
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            let message = '';
+            let propertyId = null;
+            let propertyName = '';
+            
             if (data.count && data.count > 1) {
-                resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
+                message = `✅ ${data.message}`;
                 showToast(`✅ ${data.count} properties created successfully!`, 'success');
+                // For multiple properties, use the first one
+                if (data.properties && data.properties.length > 0) {
+                    propertyId = data.properties[0]._id || data.properties[0].id;
+                    propertyName = data.properties[0].name;
+                }
             } else {
-                resultDiv.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
+                message = `✅ ${data.message}`;
                 showToast('✅ Property created successfully!', 'success');
+                propertyId = data.property?._id || data.property?.id;
+                propertyName = data.property?.name || '';
             }
+            
+            resultDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
             
             // Reset form
             document.getElementById('createPropertyForm').reset();
             document.getElementById('propertyPhotoPreview').innerHTML = '';
             
-            // Reload after a delay
-            setTimeout(() => location.reload(), 2000);
+            // 👇 NEW: Show agreement creation prompt
+            if (propertyId) {
+                showAgreementPrompt(propertyId, propertyName);
+            } else {
+                // If no property ID, just reload
+                setTimeout(() => location.reload(), 2000);
+            }
         } else {
             resultDiv.innerHTML = `<div class="alert alert-error">❌ ${data.detail || 'Failed to create property(ies)'}</div>`;
         }
@@ -2842,6 +2860,451 @@ document.getElementById('createPropertyForm')?.addEventListener('submit', functi
         }
     });
 });
+
+// ============================================
+// SHOW AGREEMENT PROMPT AFTER PROPERTY CREATION
+// ============================================
+function showAgreementPrompt(propertyId, propertyName) {
+    // Create a modal/prompt for agreement creation
+    const overlay = document.createElement('div');
+    overlay.id = 'agreementPromptOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 99998;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(4px);
+    `;
+    
+    const promptDiv = document.createElement('div');
+    promptDiv.style.cssText = `
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        max-width: 500px;
+        width: 95%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        animation: scaleIn 0.3s ease;
+        position: relative;
+        z-index: 99999;
+    `;
+    
+    promptDiv.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0; color:#8B5CF6;">📄 Create Agreement</h3>
+            <button onclick="closeAgreementPrompt()" 
+                    style="background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+        </div>
+        <p style="color:#666; margin-bottom:0.5rem;">
+            Property <strong>"${propertyName}"</strong> created successfully!
+        </p>
+        <p style="color:#666; margin-bottom:1rem;">
+            Would you like to create an agreement/contract for this property?
+        </p>
+        
+        <div style="display:flex; flex-direction:column; gap:0.75rem;">
+            <button onclick="openAgreementFromTemplate('${propertyId}', '${propertyName}')" 
+                    class="btn btn-primary" style="background:#10B981; width:100%;">
+                📝 Create Agreement from Template
+            </button>
+            <button onclick="createNewAgreement('${propertyId}', '${propertyName}')" 
+                    class="btn btn-primary" style="background:#8B5CF6; width:100%;">
+                ✏️ Create New Agreement
+            </button>
+            <button onclick="closeAgreementPrompt()" 
+                    class="btn btn-secondary" style="width:100%;">
+                Skip (Create Later)
+            </button>
+        </div>
+    `;
+    
+    overlay.appendChild(promptDiv);
+    document.body.appendChild(overlay);
+}
+
+// ============================================
+// CLOSE AGREEMENT PROMPT
+// ============================================
+function closeAgreementPrompt() {
+    const overlay = document.getElementById('agreementPromptOverlay');
+    if (overlay) overlay.remove();
+    // Reload after closing
+    setTimeout(() => location.reload(), 500);
+}
+
+// ============================================
+// OPEN AGREEMENT FROM TEMPLATE
+// ============================================
+async function openAgreementFromTemplate(propertyId, propertyName) {
+    closeAgreementPrompt();
+    
+    try {
+        // Fetch available templates
+        const response = await fetch('/api/admin/get_agreement_templates');
+        const data = await response.json();
+        
+        if (data.success && data.templates && data.templates.length > 0) {
+            // Show template selection
+            showTemplateSelection(propertyId, propertyName, data.templates);
+        } else {
+            // No templates available, create new
+            showToast('No existing agreement templates found. Creating a new agreement...', 'info');
+            setTimeout(() => {
+                createNewAgreement(propertyId, propertyName);
+            }, 1000);
+        }
+    } catch (error) {
+        console.error('Error loading templates:', error);
+        showToast('Error loading templates. Creating a new agreement...', 'error');
+        setTimeout(() => {
+            createNewAgreement(propertyId, propertyName);
+        }, 1000);
+    }
+}
+
+// ============================================
+// SHOW TEMPLATE SELECTION
+// ============================================
+function showTemplateSelection(propertyId, propertyName, templates) {
+    const overlay = document.createElement('div');
+    overlay.id = 'templateSelectionOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 99998;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(4px);
+    `;
+    
+    let templatesHtml = templates.map(t => `
+        <div style="border:1px solid #e0e0e0; padding:0.75rem 1rem; border-radius:6px; cursor:pointer; transition:background 0.2s;"
+             onmouseover="this.style.background='#f5f3ff'"
+             onmouseout="this.style.background='white'"
+             onclick="selectTemplateAndCreateAgreement('${propertyId}', '${propertyName}', '${t.id}')">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong style="color:#8B5CF6;">${t.name || 'Template'}</strong>
+                    <div style="font-size:0.85rem; color:#666; margin-top:0.1rem;">
+                        Property: ${t.property_name || 'N/A'} | Rent: ₦${t.rent_amount || 0}
+                    </div>
+                </div>
+                <span style="color:#10B981; font-size:0.8rem;">${new Date(t.created_at).toLocaleDateString()}</span>
+            </div>
+        </div>
+    `).join('');
+    
+    const selectionDiv = document.createElement('div');
+    selectionDiv.style.cssText = `
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        max-width: 600px;
+        width: 95%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        animation: scaleIn 0.3s ease;
+        position: relative;
+        z-index: 99999;
+    `;
+    
+    selectionDiv.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0; color:#8B5CF6;">📋 Select Agreement Template</h3>
+            <button onclick="document.getElementById('templateSelectionOverlay').remove()" 
+                    style="background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+        </div>
+        <p style="color:#666; margin-bottom:1rem;">
+            Select an existing agreement to use as a template for <strong>"${propertyName}"</strong>
+        </p>
+        
+        <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
+            ${templatesHtml}
+        </div>
+        
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button onclick="createNewAgreement('${propertyId}', '${propertyName}')" 
+                    class="btn btn-primary" style="background:#8B5CF6; flex:1;">
+                ✏️ Create New Instead
+            </button>
+            <button onclick="document.getElementById('templateSelectionOverlay').remove()" 
+                    class="btn btn-secondary">
+                Cancel
+            </button>
+        </div>
+    `;
+    
+    overlay.appendChild(selectionDiv);
+    document.body.appendChild(overlay);
+}
+
+// ============================================
+// SELECT TEMPLATE AND CREATE AGREEMENT
+// ============================================
+async function selectTemplateAndCreateAgreement(propertyId, propertyName, templateId) {
+    // Close the template selection overlay
+    document.getElementById('templateSelectionOverlay')?.remove();
+    
+    showToast('⏳ Loading template...', 'info');
+    
+    try {
+        const response = await fetch(`/api/admin/get_agreement_template/${templateId}`);
+        const data = await response.json();
+        
+        if (data.success && data.template) {
+            const template = data.template;
+            // Open agreement form with template data
+            showAgreementForm(propertyId, propertyName, template);
+        } else {
+            showToast('❌ Failed to load template. Creating new agreement...', 'error');
+            setTimeout(() => {
+                createNewAgreement(propertyId, propertyName);
+            }, 1000);
+        }
+    } catch (error) {
+        console.error('Error loading template:', error);
+        showToast('❌ Error loading template. Creating new agreement...', 'error');
+        setTimeout(() => {
+            createNewAgreement(propertyId, propertyName);
+        }, 1000);
+    }
+}
+
+
+// ============================================
+// SHOW AGREEMENT FORM (with template data)
+// ============================================
+function showAgreementForm(propertyId, propertyName, template = null) {
+    // Close any existing overlays
+    document.getElementById('templateSelectionOverlay')?.remove();
+    document.getElementById('agreementPromptOverlay')?.remove();
+    
+    // Get tenants for dropdown
+    fetch('/api/admin/get_users')
+        .then(response => response.json())
+        .then(data => {
+            const tenants = data.users?.filter(u => u.user_category === 'Tenant' && u.tenant_status === 'active') || [];
+            
+            const overlay = document.createElement('div');
+            overlay.id = 'agreementFormOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                z-index: 99998;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                backdrop-filter: blur(4px);
+            `;
+            
+            const formDiv = document.createElement('div');
+            formDiv.style.cssText = `
+                background: white;
+                padding: 2rem;
+                border-radius: 12px;
+                max-width: 600px;
+                width: 95%;
+                max-height: 90vh;
+                overflow-y: auto;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                animation: scaleIn 0.3s ease;
+                position: relative;
+                z-index: 99999;
+            `;
+            
+            const tenantOptions = tenants.map(t => `
+                <option value="${t.user_id}">${t.user_id} - ${t.first_name || ''} ${t.last_name || ''}</option>
+            `).join('');
+            
+            const templateData = template || {};
+            
+            formDiv.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h3 style="margin:0; color:#8B5CF6;">📝 Create Agreement</h3>
+                    <button onclick="document.getElementById('agreementFormOverlay').remove()" 
+                            style="background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
+                </div>
+                <p style="color:#666; margin-bottom:1rem;">
+                    Create an agreement/contract for <strong>"${propertyName}"</strong>
+                    ${template ? '<span style="color:#10B981;"> (Template loaded)</span>' : ''}
+                </p>
+                
+                <form id="agreementForm" style="display:flex; flex-direction:column; gap:0.75rem;">
+                    <input type="hidden" id="agreementPropertyId" value="${propertyId}">
+                    <input type="hidden" id="agreementPropertyName" value="${propertyName}">
+                    
+                    <div>
+                        <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Agreement Name</label>
+                        <input type="text" id="agreementName" class="form-control" 
+                               value="${templateData.name || `Agreement - ${propertyName}`}" required>
+                    </div>
+                    
+                    <div>
+                        <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Select Tenant</label>
+                        <select id="agreementTenantId" class="form-control" required>
+                            <option value="">-- Select Tenant --</option>
+                            ${tenantOptions}
+                        </select>
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem;">
+                        <div>
+                            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Start Date</label>
+                            <input type="date" id="agreementStartDate" class="form-control" 
+                                   value="${templateData.start_date || ''}" required>
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:0.25rem; font-weight:500;">End Date</label>
+                            <input type="date" id="agreementEndDate" class="form-control" 
+                                   value="${templateData.end_date || ''}" required>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Rent Amount (₦)</label>
+                        <input type="number" id="agreementRentAmount" class="form-control" 
+                               value="${templateData.rent_amount || 0}" required>
+                    </div>
+                    
+                    <div>
+                        <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Terms & Conditions</label>
+                        <textarea id="agreementTerms" class="form-control" rows="4" required>${templateData.terms || 'Standard tenancy terms apply. Tenant agrees to pay rent on time and maintain the property.'}</textarea>
+                    </div>
+                    
+                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                        <button type="submit" class="btn btn-primary" style="background:#10B981; flex:1;">
+                            📄 Create Agreement
+                        </button>
+                        <button type="button" onclick="document.getElementById('agreementFormOverlay').remove()" 
+                                class="btn btn-secondary">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+                <div id="agreementFormResult" style="margin-top:0.75rem;"></div>
+            `;
+            
+            overlay.appendChild(formDiv);
+            document.body.appendChild(overlay);
+            
+            // Handle form submission
+            document.getElementById('agreementForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitAgreementForm();
+            });
+        })
+        .catch(error => {
+            console.error('Error loading tenants:', error);
+            showToast('❌ Error loading tenants for agreement', 'error');
+        });
+}
+
+// ============================================
+// SUBMIT AGREEMENT FORM
+// ============================================
+async function submitAgreementForm() {
+    const submitButton = document.querySelector('#agreementForm button[type="submit"]');
+    const resultDiv = document.getElementById('agreementFormResult');
+    
+    const data = {
+        property_id: document.getElementById('agreementPropertyId').value,
+        property_name: document.getElementById('agreementPropertyName').value,
+        tenant_id: document.getElementById('agreementTenantId').value,
+        name: document.getElementById('agreementName').value,
+        start_date: document.getElementById('agreementStartDate').value,
+        end_date: document.getElementById('agreementEndDate').value,
+        rent_amount: parseFloat(document.getElementById('agreementRentAmount').value) || 0,
+        terms: document.getElementById('agreementTerms').value
+    };
+    
+    // Validate
+    if (!data.tenant_id) {
+        resultDiv.innerHTML = `<div class="alert alert-error">❌ Please select a tenant.</div>`;
+        return;
+    }
+    
+    if (!data.start_date || !data.end_date) {
+        resultDiv.innerHTML = `<div class="alert alert-error">❌ Please select both start and end dates.</div>`;
+        return;
+    }
+    
+    if (new Date(data.end_date) <= new Date(data.start_date)) {
+        resultDiv.innerHTML = `<div class="alert alert-error">❌ End date must be after start date.</div>`;
+        return;
+    }
+    
+    if (data.rent_amount <= 0) {
+        resultDiv.innerHTML = `<div class="alert alert-error">❌ Rent amount must be greater than 0.</div>`;
+        return;
+    }
+    
+    if (submitButton) {
+        showButtonSpinner(submitButton);
+    }
+    resultDiv.innerHTML = '<div style="color:#8B5CF6;">⏳ Creating agreement...</div>';
+    
+    try {
+        const response = await fetch('/api/agreements/create_agreement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">✅ ${result.message}</div>
+                <p style="margin-top:0.5rem; color:#10B981;">🎉 Agreement created successfully!</p>
+            `;
+            showToast('✅ Agreement created successfully!', 'success');
+            
+            // Close the form after a delay
+            setTimeout(() => {
+                document.getElementById('agreementFormOverlay')?.remove();
+                location.reload();
+            }, 3000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-error">❌ ${result.detail || 'Failed to create agreement'}</div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-error">❌ Error: ${error.message}</div>
+        `;
+    } finally {
+        if (submitButton) {
+            hideButtonSpinner(submitButton);
+        }
+    }
+}
+
+// ============================================
+// CREATE NEW AGREEMENT (without template)
+// ============================================
+function createNewAgreement(propertyId, propertyName) {
+    closeAgreementPrompt();
+    // Show agreement form without template data
+    setTimeout(() => {
+        showAgreementForm(propertyId, propertyName, null);
+    }, 300);
+}
 
 // ============================================
 // PROPERTY NAME PREVIEW (for batch creation)
