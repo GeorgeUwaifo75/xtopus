@@ -2926,23 +2926,38 @@ function showAgreementPrompt(propertyId, propertyName) {
     
     overlay.appendChild(promptDiv);
     document.body.appendChild(overlay);
+    
+    // 👇 FIX: Remove auto-reload - user should control when to close
+    // The closeAgreementPrompt function will handle cleanup without reloading
 }
 
 // ============================================
-// CLOSE AGREEMENT PROMPT
+// CLOSE AGREEMENT PROMPT - FIXED (No auto-reload)
 // ============================================
 function closeAgreementPrompt() {
     const overlay = document.getElementById('agreementPromptOverlay');
     if (overlay) overlay.remove();
-    // Reload after closing
-    setTimeout(() => location.reload(), 500);
+    
+    // Close template selection overlay if open
+    const templateOverlay = document.getElementById('templateSelectionOverlay');
+    if (templateOverlay) templateOverlay.remove();
+    
+    // Close agreement form overlay if open
+    const formOverlay = document.getElementById('agreementFormOverlay');
+    if (formOverlay) formOverlay.remove();
+    
+    // 👇 FIX: Do NOT reload the page - let the user continue working
+    // Show a toast notification instead
+    showToast('Property created! You can create an agreement later from the Agreements module.', 'info');
 }
 
 // ============================================
-// OPEN AGREEMENT FROM TEMPLATE
+// OPEN AGREEMENT FROM TEMPLATE - FIXED
 // ============================================
 async function openAgreementFromTemplate(propertyId, propertyName) {
-    closeAgreementPrompt();
+    // Close the prompt
+    const overlay = document.getElementById('agreementPromptOverlay');
+    if (overlay) overlay.remove();
     
     try {
         // Fetch available templates
@@ -2969,7 +2984,7 @@ async function openAgreementFromTemplate(propertyId, propertyName) {
 }
 
 // ============================================
-// SHOW TEMPLATE SELECTION
+// SHOW TEMPLATE SELECTION - FIXED (No auto-reload)
 // ============================================
 function showTemplateSelection(propertyId, propertyName, templates) {
     const overlay = document.createElement('div');
@@ -3023,7 +3038,7 @@ function showTemplateSelection(propertyId, propertyName, templates) {
     selectionDiv.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
             <h3 style="margin:0; color:#8B5CF6;">📋 Select Agreement Template</h3>
-            <button onclick="document.getElementById('templateSelectionOverlay').remove()" 
+            <button onclick="closeTemplateSelection()" 
                     style="background:#EF4444; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1.2rem;">×</button>
         </div>
         <p style="color:#666; margin-bottom:1rem;">
@@ -3039,7 +3054,7 @@ function showTemplateSelection(propertyId, propertyName, templates) {
                     class="btn btn-primary" style="background:#8B5CF6; flex:1;">
                 ✏️ Create New Instead
             </button>
-            <button onclick="document.getElementById('templateSelectionOverlay').remove()" 
+            <button onclick="closeTemplateSelection()" 
                     class="btn btn-secondary">
                 Cancel
             </button>
@@ -3048,6 +3063,16 @@ function showTemplateSelection(propertyId, propertyName, templates) {
     
     overlay.appendChild(selectionDiv);
     document.body.appendChild(overlay);
+}
+
+// ============================================
+// CLOSE TEMPLATE SELECTION
+// ============================================
+function closeTemplateSelection() {
+    const overlay = document.getElementById('templateSelectionOverlay');
+    if (overlay) overlay.remove();
+    // Show the prompt again if user wants to go back
+    // But don't auto-reload
 }
 
 // ============================================
@@ -3216,7 +3241,7 @@ function showAgreementForm(propertyId, propertyName, template = null) {
 }
 
 // ============================================
-// SUBMIT AGREEMENT FORM
+// SUBMIT AGREEMENT FORM - FIXED
 // ============================================
 async function submitAgreementForm() {
     const submitButton = document.querySelector('#agreementForm button[type="submit"]');
@@ -3274,11 +3299,34 @@ async function submitAgreementForm() {
             `;
             showToast('✅ Agreement created successfully!', 'success');
             
-            // Close the form after a delay
+            // 👇 FIX: Close the form and show success without auto-reload
             setTimeout(() => {
-                document.getElementById('agreementFormOverlay')?.remove();
-                location.reload();
-            }, 3000);
+                // Remove all overlays
+                const formOverlay = document.getElementById('agreementFormOverlay');
+                if (formOverlay) formOverlay.remove();
+                
+                const templateOverlay = document.getElementById('templateSelectionOverlay');
+                if (templateOverlay) templateOverlay.remove();
+                
+                const promptOverlay = document.getElementById('agreementPromptOverlay');
+                if (promptOverlay) promptOverlay.remove();
+                
+                // Update the property list or show a success message in the result area
+                const resultDiv = document.getElementById('createPropertyResult');
+                if (resultDiv) {
+                    resultDiv.innerHTML += `
+                        <div style="margin-top:1rem; padding:1rem; background:#D1FAE5; border-radius:8px; border-left:4px solid #10B981;">
+                            <strong style="color:#065F46;">✅ Agreement created successfully!</strong>
+                            <p style="color:#065F46; margin-top:0.25rem;">The tenant has been notified to review and sign the agreement.</p>
+                        </div>
+                    `;
+                }
+                
+                // Refresh the page after a longer delay - only after showing success
+                setTimeout(() => {
+                    location.reload();
+                }, 3000);
+            }, 1500);
         } else {
             resultDiv.innerHTML = `
                 <div class="alert alert-error">❌ ${result.detail || 'Failed to create agreement'}</div>
@@ -3296,10 +3344,13 @@ async function submitAgreementForm() {
 }
 
 // ============================================
-// CREATE NEW AGREEMENT (without template)
+// CREATE NEW AGREEMENT (without template) - FIXED
 // ============================================
 function createNewAgreement(propertyId, propertyName) {
-    closeAgreementPrompt();
+    // Close the prompt first
+    const overlay = document.getElementById('agreementPromptOverlay');
+    if (overlay) overlay.remove();
+    
     // Show agreement form without template data
     setTimeout(() => {
         showAgreementForm(propertyId, propertyName, null);
