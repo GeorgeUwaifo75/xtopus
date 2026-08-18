@@ -57,10 +57,6 @@
         <div class="stat-label">Pending Payments</div>
     </div>
     <div class="stat-card">
-        <div class="stat-number" id="statPendingAgreements">0</div>
-        <div class="stat-label">Awaiting Signature</div>
-    </div>
-    <div class="stat-card">
         <div class="stat-number" id="statNewMessages">0</div>
         <div class="stat-label">New Messages</div>
     </div>
@@ -80,7 +76,6 @@ async function loadDashboardStats() {
         if (data.success && data.stats) {
             document.getElementById('statPendingTenants').textContent = data.stats.pending_tenants || 0;
             document.getElementById('statPendingPayments').textContent = data.stats.pending_payments || 0;
-            document.getElementById('statPendingAgreements').textContent = data.stats.pending_agreements || 0;
             document.getElementById('statNewMessages').textContent = data.stats.new_messages || 0;
         }
     } catch (error) {
@@ -1737,7 +1732,7 @@ function displayUsers(users, filterType = 'all') {
         filterLabel = 'Active Tenants';
     } else if (filterType === 'pending') {
         displayUsers = users.filter(u => 
-            u.tenant_status === 'pending' || u.tenant_status === 'pending_payment' || u.tenant_status === 'pending_agreement'
+            u.tenant_status === 'pending' || u.tenant_status === 'pending_payment'
         );
         filterLabel = 'Pending Users';
     } else {
@@ -1831,9 +1826,6 @@ function displayUsers(users, filterType = 'all') {
                 tenantStatusColor = '#EF4444';
             } else if (user.tenant_status === 'pending_payment') {
                 tenantStatusDisplay = '⏳ Payment Pending';
-                tenantStatusColor = '#F59E0B';
-            } else if (user.tenant_status === 'pending_agreement') {
-                tenantStatusDisplay = '📝 Awaiting Signature';
                 tenantStatusColor = '#F59E0B';
             }
         } else if (user.tenant_status === 'pending' && user.user_category !== 'Tenant') {
@@ -2466,7 +2458,7 @@ async function loadPendingPayments() {
 // VERIFY PAYMENT AND ACTIVATE (Admin)
 // ============================================
 async function verifyPaymentAndActivate(userId) {
-    if (!confirm(`Have you verified the payment from ${userId}? This will mark their payment as verified and activate their tenancy if their agreement has already been signed.`)) {
+    if (!confirm(`Have you verified the payment from ${userId}? This will activate their tenancy.`)) {
         return;
     }
     
@@ -2492,10 +2484,7 @@ async function verifyPaymentAndActivate(userId) {
             container.innerHTML = `
                 <div class="alert alert-success">✅ ${data.message}</div>
             `;
-            showToast(
-                data.activated ? '✅ Tenant activated successfully!' : '📝 Payment verified - awaiting tenant signature.',
-                'success'
-            );
+            showToast('✅ Tenant activated successfully!', 'success');
             setTimeout(() => {
                 loadPendingPayments();
                 loadAllUsers();
@@ -3127,14 +3116,14 @@ function showAgreementForm(propertyId, propertyName, template = null) {
     document.getElementById('templateSelectionOverlay')?.remove();
     document.getElementById('agreementPromptOverlay')?.remove();
     
-    // Get tenants for dropdown - FIXED to include pending_payment, pending_agreement and active tenants
+    // Get tenants for dropdown - FIXED to include pending_payment and active tenants
     fetch('/api/admin/get_users')
         .then(response => response.json())
         .then(data => {
-            // 👇 FIX: Include 'active', 'pending_payment', and 'pending_agreement' tenants
+            // 👇 FIX: Include both 'active' and 'pending_payment' tenants
             const tenants = data.users?.filter(u => 
                 u.user_category === 'Tenant' && 
-                (u.tenant_status === 'active' || u.tenant_status === 'pending_payment' || u.tenant_status === 'pending_agreement')
+                (u.tenant_status === 'active' || u.tenant_status === 'pending_payment')
             ) || [];
             
             const overlay = document.createElement('div');
@@ -3173,7 +3162,7 @@ function showAgreementForm(propertyId, propertyName, template = null) {
             if (tenants.length > 0) {
                 tenants.forEach(t => {
                     const name = `${t.first_name || ''} ${t.last_name || ''}`.trim() || t.user_id;
-                    const statusLabel = t.tenant_status === 'active' ? '✅ Active' : t.tenant_status === 'pending_agreement' ? '📝 Awaiting Signature' : '⏳ Payment Pending';
+                    const statusLabel = t.tenant_status === 'active' ? '✅ Active' : '⏳ Payment Pending';
                     tenantOptions += `
                         <option value="${t.user_id}">${t.user_id} - ${name} (${t.email || 'No email'}) ${statusLabel}</option>
                     `;

@@ -705,29 +705,6 @@ async def sign_agreement(request: Request):
             for u in users:
                 if u.get("user_id") == current_user.get("user_id"):
                     u["agreement_status"] = "signed"
-                    
-                    # If rent payment was already confirmed and this tenant
-                    # was only waiting on the signature, the assignment is
-                    # now complete - finalize activation here.
-                    if u.get("tenant_status") == "pending_agreement":
-                        u["tenant_status"] = "active"
-                        u["tenant_activated_by"] = "System (Agreement Signed)"
-                        u["tenant_activated_at"] = datetime.now().isoformat()
-                        u["awaiting_agreement_signature"] = False
-                        
-                        create_notification(
-                            u.get("user_id"),
-                            "tenant_assignment_completed",
-                            f"🎉 Your tenancy for '{agreement.get('property_name')}' is now fully active - payment and agreement are both confirmed."
-                        )
-                        assigned_by = u.get("tenant_assigned_by")
-                        if assigned_by:
-                            create_notification(
-                                assigned_by,
-                                "tenant_assignment_completed",
-                                f"✅ {u.get('user_id')} has signed the agreement for '{agreement.get('property_name')}' and their tenancy is now active."
-                            )
-                    
                     db.update_collection_item("users", u.get("_id"), u)
                     break
             
