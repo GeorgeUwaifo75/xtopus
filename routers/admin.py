@@ -6292,11 +6292,11 @@ async def get_agreement_templates(request: Request):
 
 
 # ============================================
-# GET AGREEMENT TEMPLATE BY ID
+# GET AGREEMENT TEMPLATE BY ID - FIXED DATE FORMAT
 # ============================================
 @router.get("/get_agreement_template/{template_id}")
 async def get_agreement_template(request: Request, template_id: str):
-    """Get a specific agreement template by ID"""
+    """Get a specific agreement template by ID with properly formatted dates"""
     try:
         current_user = get_current_user(request)
         if not current_user:
@@ -6320,6 +6320,34 @@ async def get_agreement_template(request: Request, template_id: str):
                 content={"success": False, "detail": "Template not found"}
             )
         
+        # 👇 FIX: Ensure dates are in proper format
+        if template.get("start_date"):
+            try:
+                # If it's already in ISO format, keep it
+                if not template["start_date"].match(r'^\d{4}-\d{2}-\d{2}$'):
+                    d = datetime.fromisoformat(template["start_date"])
+                    template["start_date"] = d.date().isoformat()
+            except:
+                # If parsing fails, try to get just the date part
+                try:
+                    d = datetime.strptime(template["start_date"], "%Y-%m-%d")
+                    template["start_date"] = d.date().isoformat()
+                except:
+                    # If all fails, set to empty
+                    template["start_date"] = ""
+        
+        if template.get("end_date"):
+            try:
+                if not template["end_date"].match(r'^\d{4}-\d{2}-\d{2}$'):
+                    d = datetime.fromisoformat(template["end_date"])
+                    template["end_date"] = d.date().isoformat()
+            except:
+                try:
+                    d = datetime.strptime(template["end_date"], "%Y-%m-%d")
+                    template["end_date"] = d.date().isoformat()
+                except:
+                    template["end_date"] = ""
+        
         return JSONResponse({
             "success": True,
             "template": template
@@ -6330,4 +6358,5 @@ async def get_agreement_template(request: Request, template_id: str):
         return JSONResponse(
             status_code=500,
             content={"success": False, "detail": str(e)}
-        )    
+        )
+    
