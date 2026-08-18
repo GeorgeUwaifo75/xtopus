@@ -413,7 +413,6 @@
 {% if user.user_category == "Tenant" and user.tenant_status == "pending_payment" %}
 <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin:1rem 0;">
     <h3>💳 Payment Required</h3>
-    <p>Your tenant request has been approved! Please make payment to activate your tenancy.</p>
     
     <div style="background:#f5f3ff; padding:1.5rem; border-radius:8px; margin:1rem 0; border:2px solid #8B5CF6;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
@@ -424,6 +423,8 @@
         </div>
     </div>
     
+    {% if user.agreement_status == "signed" %}
+    <p>Your tenant request has been approved! Please make payment to activate your tenancy.</p>
     <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
         <button onclick="payRentWithPaystack()" class="btn btn-primary pay-rent-btn" style="background:#8B5CF6;">
             💳 Pay Rent Now
@@ -433,6 +434,30 @@
         </button>
     </div>
     <div id="paymentResult" style="margin-top:1rem;"></div>
+    {% elif user.agreement_id %}
+    <!-- Payment must not happen before the agreement is signed, so payment
+         is gated here instead of just relying on the backend rejection. -->
+    <div class="alert alert-warning" style="background:#FEF3C7; padding:1rem; border-radius:8px; margin-top:1rem;">
+        <strong>📝 Please Sign Your Agreement First</strong>
+        <p>Your tenancy agreement needs to be digitally signed before you can make payment. Scroll up to the "Tenancy Agreement" section to review and sign it.</p>
+    </div>
+    {% else %}
+    <div class="alert alert-warning" style="background:#FEF3C7; padding:1rem; border-radius:8px; margin-top:1rem;">
+        <strong>📝 Agreement Not Yet Available</strong>
+        <p>A tenancy agreement has not yet been created for this property. Please contact your administrator - payment cannot be completed until an agreement is created and signed.</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+    <!-- Payment confirmed, still waiting on the signed agreement to finalize assignment.
+         (The actual sign button/UI is already provided by the "Tenancy Agreement"
+         section above, which remains visible since agreement_status is still
+         "pending" at this point - this is just a pointer to it.) -->
+{% if user.user_category == "Tenant" and user.tenant_status == "pending_agreement" %}
+<div class="alert alert-warning" style="background:#FEF3C7; padding:1rem; border-radius:8px; margin:1rem 0;">
+    <strong>📝 One Step Left: Sign Your Agreement</strong>
+    <p>Your rent payment has been confirmed. Your tenancy will be fully activated as soon as you digitally sign your tenancy agreement above.</p>
 </div>
 {% endif %}
 

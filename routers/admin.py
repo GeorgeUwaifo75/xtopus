@@ -2038,13 +2038,30 @@ async def verify_payment_and_activate(request: Request):
                 content={"success": False, "detail": "User not found"}
             )
         
-        # Update user to fully activated
-        target_user["tenant_status"] = "active"
+        # Only fully activate if the tenancy agreement has been signed.
+        # Payment verification alone must not complete the assignment - the
+        # tenant still needs to have digitally signed their agreement.
+        agreement_signed = False
+        data = db.get_data()
+        assigned_property_id = target_user.get("assigned_property_id")
+        for a in data.get("agreements", []):
+            same_property = assigned_property_id and (a.get("property_id") == assigned_property_id)
+            if a.get("tenant_id") == user_id and (same_property or not assigned_property_id):
+                if a.get("signed"):
+                    agreement_signed = True
+                break
+        
         target_user["payment_status"] = "paid"
         target_user["payment_verified_by"] = current_user.get("user_id")
         target_user["payment_verified_at"] = datetime.now().isoformat()
-        target_user["tenant_activated_by"] = current_user.get("user_id")
-        target_user["tenant_activated_at"] = datetime.now().isoformat()
+        
+        if agreement_signed:
+            target_user["tenant_status"] = "active"
+            target_user["tenant_activated_by"] = current_user.get("user_id")
+            target_user["tenant_activated_at"] = datetime.now().isoformat()
+        else:
+            target_user["tenant_status"] = "pending_agreement"
+            target_user["awaiting_agreement_signature"] = True
         
         success = db.update_collection_item("users", target_user.get("_id"), target_user)
         
@@ -2075,45 +2092,61 @@ async def verify_payment_and_activate(request: Request):
                     break
             
             # Notify the tenant
-            create_notification(
-                user_id,
-                "tenant_activated",
-                f"🎉 Your tenancy has been ACTIVATED! Welcome to your new home.",
-                {
-                    "property_id": target_user.get("assigned_property_id"),
-                    "rental_start": target_user.get("rental_start_date"),
-                    "rental_end": target_user.get("rental_end_date")
-                }
-            )
+            if agreement_signed:
+                create_notification(
+                    user_id,
+                    "tenant_activated",
+                    f"🎉 Your tenancy has been ACTIVATED! Welcome to your new home.",
+                    {
+                        "property_id": target_user.get("assigned_property_id"),
+                        "rental_start": target_user.get("rental_start_date"),
+                        "rental_end": target_user.get("rental_end_date")
+                    }
+                )
+            else:
+                create_notification(
+                    user_id,
+                    "agreement_signature_required",
+                    f"💰 Your payment has been verified. Please sign your tenancy agreement to complete your assignment."
+                )
             
             # Notify the agent who assigned this tenant
             assigned_by = target_user.get("tenant_assigned_by")
             if assigned_by:
-                create_notification(
-                    assigned_by,
-                    "tenant_activated",
-                    f"🎉 {user_id} has been fully activated as a tenant by {current_user.get('user_id')}.",
-                    {
-                        "user_id": user_id,
-                        "property_name": target_user.get("assigned_property_name", "Unknown Property")
-                    }
-                )
+                if agreement_signed:
+                    create_notification(
+                        assigned_by,
+                        "tenant_activated",
+                        f"🎉 {user_id} has been fully activated as a tenant by {current_user.get('user_id')}.",
+                        {
+                            "user_id": user_id,
+                            "property_name": target_user.get("assigned_property_name", "Unknown Property")
+                        }
+                    )
+                else:
+                    create_notification(
+                        assigned_by,
+                        "agreement_signature_pending",
+                        f"💰 {user_id}'s payment was verified by {current_user.get('user_id')}, but they still need to sign the tenancy agreement."
+                    )
             
             # Notify all admins
             admins = [u for u in users if u.get("user_category") in ["Super Administrator", "Administrator"]]
-            for admin in admins:
-                if admin.get("user_id") != current_user.get("user_id"):
-                    create_notification(
-                        admin.get("user_id"),
-                        "tenant_activated",
-                        f"🎉 {user_id} has been activated as a tenant by {current_user.get('user_id')}.",
-                        {
-                            "user_id": user_id
-                        }
-                    )
+            if agreement_signed:
+                for admin in admins:
+                    if admin.get("user_id") != current_user.get("user_id"):
+                        create_notification(
+                            admin.get("user_id"),
+                            "tenant_activated",
+                            f"🎉 {user_id} has been activated as a tenant by {current_user.get('user_id')}.",
+                            {
+                                "user_id": user_id
+                            }
+                        )
             
             # Send email to tenant
-            email_body = f"""
+            if agreement_signed:
+                email_body = f"""
 Hello {target_user.get('first_name', 'Tenant')},
 
 🎉 Congratulations! Your tenancy has been ACTIVATED.
@@ -2127,26 +2160,49 @@ Your tenancy is now active. Welcome to your new home!
 Regards,
 Xtopus Team
 """
+                email_subject = "Xtopus - Tenancy Activated"
+            else:
+                email_body = f"""
+Hello {target_user.get('first_name', 'Tenant')},
+
+💰 Your rent payment has been verified.
+
+Property: {target_user.get('assigned_property_name', 'Property')}
+Monthly Rent: ₦{target_user.get('rent_amount', 0)}
+
+One step remains: please log in and digitally sign your tenancy agreement to
+complete your assignment. Your tenancy will not be active until this is done.
+
+Regards,
+Xtopus Team
+"""
+                email_subject = "Xtopus - Please Sign Your Tenancy Agreement"
+            
             template_params = {
                 'seller_email': target_user.get("email"),
                 'to_name': target_user.get('first_name', 'Tenant'),
                 'name': 'Xtopus Property Management',
                 'email': 'geocorpsys@gmail.com',
                 'message': email_body,
-                'subject': "Xtopus - Tenancy Activated",
+                'subject': email_subject,
                 'product_name': target_user.get('assigned_property_name', 'Property')  # ← ADD THIS
             }
             
             send_emailjs_notification(
                 target_user.get("email"),
-                "Xtopus - Tenancy Activated",
+                email_subject,
                 email_body,
                 template_params
             )
             
             return JSONResponse({
                 "success": True,
-                "message": f"Tenant {user_id} activated successfully! Payment verified."
+                "activated": agreement_signed,
+                "message": (
+                    f"Tenant {user_id} activated successfully! Payment verified."
+                    if agreement_signed else
+                    f"Payment verified for {user_id}. They still need to sign the tenancy agreement before their tenancy is fully active."
+                )
             })
         else:
             return JSONResponse(
@@ -2983,6 +3039,9 @@ async def get_admin_dashboard_stats(request: Request):
         # Count pending payments (users with tenant_status='pending_payment')
         pending_payments = [u for u in users if u.get("tenant_status") == "pending_payment" and u.get("user_category") == "Tenant"]
         
+        # Count tenants who have paid but still need to sign their agreement
+        pending_agreements = [u for u in users if u.get("tenant_status") == "pending_agreement" and u.get("user_category") == "Tenant"]
+        
         # Count new messages (unread chats)
         chats = db.get_collection("chats")
         new_messages = 0
@@ -2995,6 +3054,7 @@ async def get_admin_dashboard_stats(request: Request):
             "stats": {
                 "pending_tenants": len(pending_tenants),
                 "pending_payments": len(pending_payments),
+                "pending_agreements": len(pending_agreements),
                 "new_messages": new_messages
             }
         })
@@ -3363,6 +3423,7 @@ async def get_notification_counts(request: Request):
         # Initialize counts
         pending_tenants = 0
         pending_payments = 0
+        pending_agreements = 0
         unread_messages = 0
         
         # ============================================
@@ -3382,6 +3443,12 @@ async def get_notification_counts(request: Request):
                 if u.get("user_category") == "Tenant" and u.get("tenant_status") == "pending_payment":
                     pending_payment_ids.add(u.get("user_id"))
             pending_payments = len(pending_payment_ids)
+            
+            pending_agreement_ids = set()
+            for u in users:
+                if u.get("user_category") == "Tenant" and u.get("tenant_status") == "pending_agreement":
+                    pending_agreement_ids.add(u.get("user_id"))
+            pending_agreements = len(pending_agreement_ids)
             
         elif user_category == "Sub-Administrator":
             # SUB-ADMIN: See pending tenants they created, and pending payments for their tenants
@@ -3411,6 +3478,16 @@ async def get_notification_counts(request: Request):
                         pending_payment_ids.add(u.get("user_id"))
             pending_payments = len(pending_payment_ids)
             
+            # Tenants awaiting agreement signature, assigned by this sub-admin or their agents
+            pending_agreement_ids = set()
+            for u in users:
+                if (u.get("user_category") == "Tenant" and 
+                    u.get("tenant_status") == "pending_agreement"):
+                    assigned_by = u.get("tenant_assigned_by")
+                    if assigned_by == user_id or assigned_by in created_users:
+                        pending_agreement_ids.add(u.get("user_id"))
+            pending_agreements = len(pending_agreement_ids)
+            
         elif user_category == "Agent":
             # AGENT: See pending payments for their tenants, and their own messages
             # Pending payments for tenants assigned by this agent
@@ -3421,6 +3498,15 @@ async def get_notification_counts(request: Request):
                     u.get("tenant_assigned_by") == user_id):
                     pending_payment_ids.add(u.get("user_id"))
             pending_payments = len(pending_payment_ids)
+            
+            # Pending agreement signatures for tenants assigned by this agent
+            pending_agreement_ids = set()
+            for u in users:
+                if (u.get("user_category") == "Tenant" and 
+                    u.get("tenant_status") == "pending_agreement" and
+                    u.get("tenant_assigned_by") == user_id):
+                    pending_agreement_ids.add(u.get("user_id"))
+            pending_agreements = len(pending_agreement_ids)
         
         # ============================================
         # UNREAD MESSAGES (All Users)
@@ -3433,13 +3519,14 @@ async def get_notification_counts(request: Request):
         # ============================================
         # TOTAL NOTIFICATIONS
         # ============================================
-        total_notifications = pending_tenants + pending_payments + unread_messages
+        total_notifications = pending_tenants + pending_payments + pending_agreements + unread_messages
         
         return JSONResponse({
             "success": True,
             "counts": {
                 "pending_tenants": pending_tenants,
                 "pending_payments": pending_payments,
+                "pending_agreements": pending_agreements,
                 "unread_messages": unread_messages,
                 "total": total_notifications,
                 "user_role": user_category  # For debugging

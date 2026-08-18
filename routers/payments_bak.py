@@ -623,43 +623,11 @@ async def process_rent_payment(user_id: str, reference: str, amount: float, meta
         target_user["rent_amount_paid"] = amount
         target_user["rent_paid_through"] = "Paystack"
         
-        # Update tenant status to active only once BOTH prerequisites are
-        # met: rent payment confirmed (this function) AND the tenancy
-        # agreement digitally signed. Previously this flipped straight to
-        # "active" on payment alone, which let a property be treated as
-        # fully assigned to a tenant who had never signed the agreement.
+        # Update tenant status to active if it was pending_payment
         if target_user.get("tenant_status") == "pending_payment":
-            agreement_signed = False
-            data = db.get_data()
-            for a in data.get("agreements", []):
-                same_property = property_id and (a.get("property_id") == property_id)
-                if a.get("tenant_id") == user_id and (same_property or not property_id):
-                    if a.get("signed"):
-                        agreement_signed = True
-                    break
-
-            if agreement_signed:
-                target_user["tenant_status"] = "active"
-                target_user["tenant_activated_by"] = "System (Payment)"
-                target_user["tenant_activated_at"] = datetime.now().isoformat()
-            else:
-                # Payment is confirmed, but the tenant still needs to sign
-                # the agreement before the assignment can be finalized.
-                target_user["tenant_status"] = "pending_agreement"
-                target_user["awaiting_agreement_signature"] = True
-                create_notification(
-                    user_id,
-                    "agreement_signature_required",
-                    f"📝 Your rent payment for '{property_name}' has been confirmed. Please sign your tenancy agreement to complete your assignment."
-                )
-                # Also let whoever assigned/created the agreement know payment is in, pending signature
-                assigned_by = target_user.get("tenant_assigned_by")
-                if assigned_by:
-                    create_notification(
-                        assigned_by,
-                        "agreement_signature_pending",
-                        f"💰 {user_id} has paid rent for '{property_name}' but has not yet signed the tenancy agreement."
-                    )
+            target_user["tenant_status"] = "active"
+            target_user["tenant_activated_by"] = "System (Payment)"
+            target_user["tenant_activated_at"] = datetime.now().isoformat()
         
         db.update_collection_item("users", target_user.get("_id"), target_user)
         
