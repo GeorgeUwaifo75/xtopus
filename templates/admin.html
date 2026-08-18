@@ -3109,18 +3109,22 @@ async function selectTemplateAndCreateAgreement(propertyId, propertyName, templa
 
 
 // ============================================
-// SHOW AGREEMENT FORM (with template data) - FIXED DATE HANDLING
+// SHOW AGREEMENT FORM (with template data) - FIXED TENANT FILTER
 // ============================================
 function showAgreementForm(propertyId, propertyName, template = null) {
     // Close any existing overlays
     document.getElementById('templateSelectionOverlay')?.remove();
     document.getElementById('agreementPromptOverlay')?.remove();
     
-    // Get tenants for dropdown
+    // Get tenants for dropdown - FIXED to include pending_payment and active tenants
     fetch('/api/admin/get_users')
         .then(response => response.json())
         .then(data => {
-            const tenants = data.users?.filter(u => u.user_category === 'Tenant' && u.tenant_status === 'active') || [];
+            // 👇 FIX: Include both 'active' and 'pending_payment' tenants
+            const tenants = data.users?.filter(u => 
+                u.user_category === 'Tenant' && 
+                (u.tenant_status === 'active' || u.tenant_status === 'pending_payment')
+            ) || [];
             
             const overlay = document.createElement('div');
             overlay.id = 'agreementFormOverlay';
@@ -3153,13 +3157,23 @@ function showAgreementForm(propertyId, propertyName, template = null) {
                 z-index: 99999;
             `;
             
-            const tenantOptions = tenants.map(t => `
-                <option value="${t.user_id}">${t.user_id} - ${t.first_name || ''} ${t.last_name || ''}</option>
-            `).join('');
+            // Generate tenant options with better display
+            let tenantOptions = '<option value="">-- Select Tenant --</option>';
+            if (tenants.length > 0) {
+                tenants.forEach(t => {
+                    const name = `${t.first_name || ''} ${t.last_name || ''}`.trim() || t.user_id;
+                    const statusLabel = t.tenant_status === 'active' ? '✅ Active' : '⏳ Payment Pending';
+                    tenantOptions += `
+                        <option value="${t.user_id}">${t.user_id} - ${name} (${t.email || 'No email'}) ${statusLabel}</option>
+                    `;
+                });
+            } else {
+                tenantOptions += `<option value="">No tenants available</option>`;
+            }
             
             const templateData = template || {};
             
-            // 👇 FIX: Properly format dates from template
+            // Properly format dates from template
             let startDate = templateData.start_date || '';
             let endDate = templateData.end_date || '';
             
@@ -3221,9 +3235,9 @@ function showAgreementForm(propertyId, propertyName, template = null) {
                     <div>
                         <label style="display:block; margin-bottom:0.25rem; font-weight:500;">Select Tenant</label>
                         <select id="agreementTenantId" class="form-control" required>
-                            <option value="">-- Select Tenant --</option>
                             ${tenantOptions}
                         </select>
+                        ${tenants.length === 0 ? '<small style="color:#F59E0B;">⚠️ No active tenants found. Please create a tenant first.</small>' : ''}
                     </div>
                     
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem;">
@@ -3279,7 +3293,7 @@ function showAgreementForm(propertyId, propertyName, template = null) {
 }
 
 // ============================================
-// SUBMIT AGREEMENT FORM - FIXED DATE VALIDATION
+// SUBMIT AGREEMENT FORM - FIXED VALIDATION
 // ============================================
 async function submitAgreementForm() {
     const submitButton = document.querySelector('#agreementForm button[type="submit"]');
@@ -3287,11 +3301,12 @@ async function submitAgreementForm() {
     
     const startDateInput = document.getElementById('agreementStartDate');
     const endDateInput = document.getElementById('agreementEndDate');
+    const tenantSelect = document.getElementById('agreementTenantId');
     
     const data = {
         property_id: document.getElementById('agreementPropertyId').value,
         property_name: document.getElementById('agreementPropertyName').value,
-        tenant_id: document.getElementById('agreementTenantId').value,
+        tenant_id: tenantSelect.value,
         name: document.getElementById('agreementName').value,
         start_date: startDateInput.value,
         end_date: endDateInput.value,
@@ -3302,15 +3317,18 @@ async function submitAgreementForm() {
     // Validate
     if (!data.tenant_id) {
         resultDiv.innerHTML = `<div class="alert alert-error">❌ Please select a tenant.</div>`;
+        tenantSelect.focus();
         return;
     }
     
     if (!data.start_date || !data.end_date) {
         resultDiv.innerHTML = `<div class="alert alert-error">❌ Please select both start and end dates.</div>`;
+        if (!data.start_date) startDateInput.focus();
+        else endDateInput.focus();
         return;
     }
     
-    // 👇 FIX: Better date validation
+    // Better date validation
     try {
         const start = new Date(data.start_date);
         const end = new Date(data.end_date);
@@ -3322,6 +3340,7 @@ async function submitAgreementForm() {
         
         if (end <= start) {
             resultDiv.innerHTML = `<div class="alert alert-error">❌ End date must be after start date.</div>`;
+            endDateInput.focus();
             return;
         }
     } catch (e) {
@@ -3331,6 +3350,7 @@ async function submitAgreementForm() {
     
     if (data.rent_amount <= 0) {
         resultDiv.innerHTML = `<div class="alert alert-error">❌ Rent amount must be greater than 0.</div>`;
+        document.getElementById('agreementRentAmount').focus();
         return;
     }
     
